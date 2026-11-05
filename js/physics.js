@@ -172,7 +172,7 @@ function hitAt(level, x, y, z, r) {
   const rocks = cands ? cands.rocks : level.rocks;
   for (const t of trees) if (hitTree(t, x, y, z, r)) return 'ett träd';
   for (const o of rocks) if (hitRock(o, x, y, z, r)) return 'en klippa';
-  for (const b of level.boxes) if (hitBox(b, x, y, z, r)) return b.kind === 'roof' ? 'tunneltaket' : b.kind === 'canyon' ? 'kanjonväggen' : 'en vägg';
+  for (const b of level.boxes) if (hitBox(b, x, y, z, r)) return b.kind === 'roof' ? 'tunneltaket' : b.kind === 'canyon' ? 'kanjonväggen' : b.kind === 'treewall' ? 'ett träd' : 'en vägg';
   return null;
 }
 

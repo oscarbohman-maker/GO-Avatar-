@@ -86,6 +86,7 @@ function scaleLevel(L, S) {
   k(L.start, ['x', 'y', 'z']);
   L.gates.forEach((g) => k(g, ['x', 'y', 'z', 'r', 'tube']));
   L.trees.forEach((t) => k(t, ['x', 'z', 'baseR', 'h', 'trunkH', 'trunkR']));
+  (L.decor || []).forEach((t) => k(t, ['x', 'z', 'baseR', 'h', 'trunkH', 'trunkR']));
   L.rocks.forEach((o) => k(o, ['x', 'z', 'r', 'h']));
   L.boxes.forEach((b) => k(b, ['x', 'y', 'z', 'hx', 'hy', 'hz']));
   L.zones.forEach((zn) => k(zn, ['x', 'z']));
@@ -227,7 +228,7 @@ function buildDemo() {
 // Väggar längs en slingrande rutt (kanjon). Insidan av väggarna följer rutten
 // på avståndet halfWidths[i] från mittlinjen, och hörnen sluts med gering (miter)
 // så att det aldrig blir glipor eller väggar som sticker in i korridoren.
-function canyonWalls(path, halfWidths, wallH, thick = 1.5, extend = 25) {
+function canyonWalls(path, halfWidths, wallH, thick = 1.5, extend = 25, kind = 'canyon', decor = null, rand = null) {
   const boxes = [];
   const segs = [];
   for (let i = 0; i < path.length - 1; i++) {
@@ -260,8 +261,24 @@ function canyonWalls(path, halfWidths, wallH, thick = 1.5, extend = 25) {
       const nx = -dz * s, nz = dx * s;   // utåt från korridoren
       boxes.push({
         x: (ax + bx) / 2 + nx * thick, y: wallH / 2, z: (az + bz) / 2 + nz * thick,
-        hx: thick, hy: wallH / 2, hz: L / 2, yaw: yawFromDir(dx, dz), kind: 'canyon',
+        hx: thick, hy: wallH / 2, hz: L / 2, yaw: yawFromDir(dx, dz), kind,
       });
+      // Skogsvägg: tätt packade träd i tre rader längs väggens insida
+      if (decor && rand) {
+        const rows = [[1.3, 1.7], [3.7, 2.1], [6.2, 2.5]];   // [avstånd utåt, avstånd mellan träd]
+        rows.forEach(([o, gap], row) => {
+          for (let u = rand() * gap; u < L; u += gap * (0.8 + rand() * 0.4)) {
+            const j = (rand() - 0.5) * 0.8;
+            decor.push({
+              x: ax + dx * u + nx * (o + j), z: az + dz * u + nz * (o + j),
+              baseR: 1.5 + rand() * 0.7 + row * 0.15,
+              h: 18 + rand() * 9 + row * 1.5,
+              trunkH: 2 + rand() * 1.2,
+              trunkR: 0.45,
+            });
+          }
+        });
+      }
     }
   }
   return boxes;
@@ -295,7 +312,11 @@ function buildTest() {
   });
   // korridorens halva bredd per sträcka (oskalad; ×2 i världen)
   const half = [11, 10, 9, 8, 8, 9, 10, 10, 8, 9];
-  const boxes = canyonWalls(path, half, 50);
+  const rand = mulberry32(777);
+  const decorAll = [];
+  const boxes = canyonWalls(path, half, 50, 1.5, 25, 'treewall', decorAll, rand);
+  // inga dekorträd inne i någon del av korridoren
+  const decor = decorAll.filter((t) => distToPath(path, t.x, t.z) > 8.6);
   // pelare inne i kanjonen: man måste väja höger/vänster
   const rocks = [];
   const pillar = (seg, t, side, r = 1.4) => {
@@ -317,7 +338,7 @@ function buildTest() {
     id: 'test',
     name: LEVEL_INFO.test.name,
     start: { x: start[0], y: start[1], z: start[2], yaw: yawFromDir(G[0][0] - start[0], G[0][2] - start[2]) },
-    gates, trees: [], rocks, boxes, zones, path, bounds,
+    gates, trees: [], decor, rocks, boxes, zones, path, bounds,
     ceiling: 50,
     fog: { color: 0x141c2b, near: 16, far: 78 },
     penalties: { crash: 3, miss: 5 },
@@ -350,6 +371,9 @@ export function buildLevel(id) {
   if (!b) throw new Error('Okänd bana: ' + id);
   const level = b();
   addStars(level);
+  level.decor = level.decor || [];
+  // Pilotens sikt: mörker och tät dimma – piloten ska behöva sin navigatör
+  level.pilotFog = { color: 0x03060b, near: 4, far: level.fog.far * 0.4 };   // ca 60 m sikt
   level._grid = buildGrid(level);
   return level;
 }

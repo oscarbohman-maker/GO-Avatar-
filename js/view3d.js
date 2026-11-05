@@ -22,10 +22,10 @@ export class View3D {
     this.renderer = new THREE.WebGLRenderer({ canvas, antialias: dpr < 2, powerPreference: 'high-performance' });
     this.renderer.setPixelRatio(dpr);
 
-    this.world = new World3D(level);
+    this.world = new World3D(level, { dark: this.seat === 'pilot' });
     this.rig = new PlaneRig(this.seat);
     this.world.scene.add(this.rig.root);
-    this.camera = new THREE.PerspectiveCamera(70, 1, 0.04, level.fog.far + 20);
+    this.camera = new THREE.PerspectiveCamera(70, 1, 0.04, this.world.fog.far + 20);
     this.blend = 0;          // 0 = utifrån, 1 = cockpit
     this.orbitA = 0;
     this.chasePos = null;

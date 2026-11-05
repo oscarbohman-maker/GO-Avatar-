@@ -2,7 +2,7 @@
 
 Ett samarbetsspel för två i webbläsaren (byggt för Safari på iPhone, iPad och Mac, men funkar i alla moderna webbläsare).
 
-- **Piloten** sitter i vänster stol i cockpiten och flyger planet i förstaperson, men ser bara en bit framåt. Längre bort är allt mörkt.
+- **Piloten** sitter i vänster stol i cockpiten och flyger planet i förstaperson, på natten med bara cirka 60 m sikt. Det enda ljuset är en svag kabinlampa, lysande instrument och en strålkastare i nosen. Navigatörens cockpitfönster är ljust.
 - **Navigatören** sitter i höger stol, ser en radar med alla hinder och portar och guidar piloten med rösten och med gester.
 
 Båda ser sina egna armar, ben och kropp och kompisens kropp i cockpiten. Pilotens händer följer ratten och gasreglagen. Kompisen pekar när navigatören ger en gest och trycker på knappar i taket när navigatören ritar ut rutten.
@@ -13,7 +13,7 @@ Flyg genom portarna i rätt ordning, förbi träd, klippor, en kanjon, ett hål 
 
 Tryck **🧑‍✈️ Testvärld med NPC-navigatör** på startsidan för att flyga själv med en datorstyrd navigatör i stolen bredvid. Du flyger "blint", och NPC:n ser hela banan. Den letar efter hinder framför planet och säger vart du ska flyga ("Sväng vänster och stig", "Bromsa! Skarpt höger!", "Hinder framför!") med svensk röst och textruta. Samtidigt pekar den åt rätt håll i cockpiten. Rösten slås av och på med **🔊 Röst**.
 
-Testvärlden **Kanjonslingan** är en slingrande kanjon med väggar ända upp till taket, så man kan inte flyga ur kurs. Den har trånga partier (32 m breda för ett plan med 13 m vingbredd), pelare att väja för och en skarp sväng där man måste bromsa. Alla portar ligger på samma höjd, så det handlar nästan bara om höger och vänster.
+Testvärlden **Kanjonslingan** är en slingrande väg genom tät granskog. Skogskanten är en vägg ända upp till taket, så man kan inte flyga ur kurs. Den har trånga partier (32 m breda för ett plan med 13 m vingbredd), pelare att väja för och en skarp sväng där man måste bromsa. Alla portar ligger på samma höjd, så det handlar nästan bara om höger och vänster.
 
 ## Spela
 

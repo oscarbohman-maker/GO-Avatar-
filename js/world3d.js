@@ -26,18 +26,29 @@ function groundTexture() {
 const GATE_COLORS = { next: 0xffd23f, upcoming: 0xff8c42, passed: 0x3ddc84, finish: 0xffffff };
 
 export class World3D {
-  constructor(level) {
+  // opts.dark: pilotens mörka nattvy med kort sikt
+  constructor(level, opts = {}) {
     this.level = level;
     const L = level;
+    const dark = !!opts.dark;
+    this.fog = dark ? L.pilotFog : L.fog;
     const scene = new THREE.Scene();
     this.scene = scene;
-    scene.background = new THREE.Color(L.fog.color);
-    scene.fog = new THREE.Fog(L.fog.color, L.fog.near, L.fog.far);
+    scene.background = new THREE.Color(this.fog.color);
+    scene.fog = new THREE.Fog(this.fog.color, this.fog.near, this.fog.far);
 
-    scene.add(new THREE.HemisphereLight(0xcfe3ff, 0x2d4a22, 1.7));
-    const sun = new THREE.DirectionalLight(0xfff2d6, 2.0);
-    sun.position.set(40, 80, 30);
-    scene.add(sun);
+    if (dark) {
+      // natt: svagt blått månljus
+      scene.add(new THREE.HemisphereLight(0x7f97c8, 0x0c140c, 0.45));
+      const moon = new THREE.DirectionalLight(0xa9c1ff, 0.45);
+      moon.position.set(-30, 80, 20);
+      scene.add(moon);
+    } else {
+      scene.add(new THREE.HemisphereLight(0xcfe3ff, 0x2d4a22, 1.7));
+      const sun = new THREE.DirectionalLight(0xfff2d6, 2.0);
+      sun.position.set(40, 80, 30);
+      scene.add(sun);
+    }
 
     // mark
     const B = L.bounds;
@@ -49,22 +60,34 @@ export class World3D {
     ground.position.set((B.minX + B.maxX) / 2, 0, (B.minZ + B.maxZ) / 2);
     scene.add(ground);
 
-    // träd (instansierade)
-    const trunkGeo = new THREE.CylinderGeometry(0.78, 1, 1, 6); trunkGeo.translate(0, 0.5, 0);
-    const coneGeo = new THREE.ConeGeometry(1, 1, 7); coneGeo.translate(0, 0.5, 0);
-    const trunks = new THREE.InstancedMesh(trunkGeo, new THREE.MeshLambertMaterial({ color: 0x6b4a2b }), L.trees.length);
-    const crowns = new THREE.InstancedMesh(coneGeo, new THREE.MeshLambertMaterial({ color: 0xffffff }), L.trees.length);
+    // träd (instansierade granar i tre våningar, facetterade)
+    const allTrees = L.trees.concat(L.decor || []);
     const m = new THREE.Matrix4(), q = new THREE.Quaternion(), pos = new THREE.Vector3(), scl = new THREE.Vector3();
     const col = new THREE.Color();
-    L.trees.forEach((t, i) => {
-      m.compose(pos.set(t.x, 0, t.z), q, scl.set(t.trunkR, t.trunkH + 1, t.trunkR));
-      trunks.setMatrixAt(i, m);
-      m.compose(pos.set(t.x, t.trunkH, t.z), q, scl.set(t.baseR, t.h - t.trunkH, t.baseR));
-      crowns.setMatrixAt(i, m);
-      const v = ((Math.sin(t.x * 12.9898 + t.z * 78.233) * 43758.5453) % 1 + 1) % 1;
-      crowns.setColorAt(i, col.setHSL(0.27 + v * 0.08, 0.55, 0.22 + v * 0.1));
-    });
-    scene.add(trunks, crowns);
+    if (allTrees.length) {
+      const n = allTrees.length;
+      const trunkGeo = new THREE.CylinderGeometry(0.7, 1, 1, 7); trunkGeo.translate(0, 0.5, 0);
+      const trunks = new THREE.InstancedMesh(trunkGeo, new THREE.MeshLambertMaterial({ color: 0x5a3c22, flatShading: true }), n);
+      // våningar: [bas (andel av kronan), höjd (andel), radie (andel)]
+      const tiers = [[0, 0.5, 1], [0.28, 0.45, 0.78], [0.55, 0.45, 0.55]];
+      const tierMeshes = tiers.map((_, k) => {
+        const g = new THREE.ConeGeometry(1, 1, 9 - k, 1); g.translate(0, 0.5, 0);
+        return new THREE.InstancedMesh(g, new THREE.MeshLambertMaterial({ color: 0xffffff, flatShading: true }), n);
+      });
+      allTrees.forEach((t, i) => {
+        const v = ((Math.sin(t.x * 12.9898 + t.z * 78.233) * 43758.5453) % 1 + 1) % 1;
+        const rot = q.setFromAxisAngle(new THREE.Vector3(0, 1, 0), v * 6.28);
+        m.compose(pos.set(t.x, 0, t.z), rot, scl.set(t.trunkR, t.trunkH + 1.5, t.trunkR));
+        trunks.setMatrixAt(i, m);
+        const ch = t.h - t.trunkH;
+        tiers.forEach(([b, h, r], k) => {
+          m.compose(pos.set(t.x, t.trunkH + b * ch, t.z), rot, scl.set(t.baseR * r, ch * h, t.baseR * r));
+          tierMeshes[k].setMatrixAt(i, m);
+          tierMeshes[k].setColorAt(i, col.setHSL(0.28 + v * 0.07, 0.5 + v * 0.1, 0.17 + v * 0.07 + k * 0.035));
+        });
+      });
+      scene.add(trunks, ...tierMeshes);
+    }
 
     if (L.rocks.length) {
       const rockGeo = new THREE.CylinderGeometry(1, 1.15, 1, 7); rockGeo.translate(0, 0.5, 0);
@@ -80,6 +103,7 @@ export class World3D {
       roof: new THREE.MeshLambertMaterial({ color: 0x45484e }),
     };
     for (const b of L.boxes) {
+      if (b.kind === 'treewall') continue;   // syns som träd i stället
       const mesh = new THREE.Mesh(new THREE.BoxGeometry(b.hx * 2, b.hy * 2, b.hz * 2), boxMats[b.kind] || boxMats.wall);
       mesh.position.set(b.x, b.y, b.z);
       mesh.rotation.y = b.yaw;

@@ -10,6 +10,7 @@ const COLORS = {
   treeTall: '#3fae5a',
   rock: '#9aa0a6',
   canyon: '#b08968',
+  treewall: '#1d6a34',
   wall: '#e06c5a',
   tunnel: '#8fa3b0',
   roof: 'rgba(143,163,176,0.22)',
@@ -290,7 +291,7 @@ export class RadarView {
       ctx.strokeStyle = 'rgba(255,255,255,0.18)';
       ctx.setLineDash([4 * px, 6 * px]);
       ctx.lineWidth = 1.5 * px;
-      ctx.beginPath(); ctx.arc(this.view.x, this.view.z, L.fog.far * 0.7, 0, Math.PI * 2); ctx.stroke();
+      ctx.beginPath(); ctx.arc(this.view.x, this.view.z, (L.pilotFog || L.fog).far * 0.85, 0, Math.PI * 2); ctx.stroke();
       ctx.setLineDash([]);
     }
 

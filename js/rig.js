@@ -32,6 +32,15 @@ export class PlaneRig {
     this.pilot = new Avatar(-0.6, AVATAR_STYLES.pilot, 'pilot');
     this.copilot = new Avatar(0.6, AVATAR_STYLES.copilot, 'andrepilot');
     this.cockpit.add(this.pilot.group, this.copilot.group);
+
+    // Ljus: svag varm kabinlampa (så att man ser händerna) och en strålkastare i nosen
+    const cabin = new THREE.PointLight(0xffd6a0, 2.2, 3.2, 2);
+    cabin.position.set(0, 1.85, -0.15);
+    this.cockpit.add(cabin);
+    const beam = new THREE.SpotLight(0xfff1d0, 260, 130, 0.3, 0.7, 1.4);
+    beam.position.set(0, -0.6, -6.3);
+    beam.target.position.set(0, -4, -60);
+    this.root.add(beam, beam.target);
     (localSeat === 'pilot' ? this.pilot : this.copilot).setHeadVisible(false);
 
     this._setupInstruments();
