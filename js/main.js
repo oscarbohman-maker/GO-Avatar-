@@ -6,13 +6,14 @@ import { Store } from './storage.js';
 import { MAPS, LEVEL_INFO, buildLevel } from './levels.js';
 import { sfx, unlockAudio, setSfxEnabled } from './sfx.js';
 import { NpcNavigator, NpcVoice } from './npc.js';
+import { icon, applyIcons, setIconLabel } from './icons.js';
 
 const $ = (s, r = document) => r.querySelector(s);
 const $$ = (s, r = document) => Array.from(r.querySelectorAll(s));
 
 const ROLE = {
-  pilot: { name: 'Pilot', icon: '✈️', desc: 'Flies the plane' },
-  navigator: { name: 'Navigator', icon: '🧭', desc: 'Watches the radar and guides' },
+  pilot: { name: 'Pilot', icon: 'plane', desc: 'Flies blind through the fog' },
+  navigator: { name: 'Navigator', icon: 'compass', desc: 'Rides along, sees far ahead and guides' },
 };
 const other = (r) => (r === 'pilot' ? 'navigator' : 'pilot');
 
@@ -173,7 +174,7 @@ function mapCard(m, opts = {}) {
   el.innerHTML = `<span class="num">MAP ${m.n}</span><span class="name">${esc(m.available ? m.name : 'Coming soon')}</span>`
     + `<span class="diff d-${esc(m.difficulty)}">${esc(m.difficulty)}</span>`
     + (best ? `<span class="best">Best: ${best.score != null ? best.score + ' pts · ' : ''}${best.time.toFixed(1)} s</span>` : (m.available ? '<span class="best">Not flown yet</span>' : ''))
-    + (m.available ? '<span class="art">✈️</span>' : '<span class="lock">🔒</span>');
+    + (m.available ? `<span class="art">${icon('plane')}</span>` : `<span class="lock">${icon('lock')}</span>`);
   if (!m.available) el.disabled = true;
   return el;
 }
@@ -232,7 +233,7 @@ function cleanupNet() {
   if (app.net) { app.net.close(); app.net = null; }
   clearInterval(app._expiryTimer);
   app.friendName = null;
-  $$('.voice-btn').forEach((b) => { b.classList.add('hidden'); b.classList.remove('on', 'muted'); b.textContent = '🎤 Voice off'; });
+  $$('.voice-btn').forEach((b) => { b.classList.add('hidden'); b.classList.remove('on', 'muted'); setIconLabel(b, 'mic', 'Voice off'); });
   $('#btn-audio-tap').classList.add('hidden');
 }
 
@@ -423,13 +424,13 @@ function setupVoice() {
     btns.forEach((btn) => {
       btn.classList.toggle('on', state === 'on');
       btn.classList.toggle('muted', state === 'muted');
-      btn.textContent = state === 'on' ? '🎤 Voice on' : state === 'muted' ? '🔇 Muted' : '🎤 Voice off';
+      setIconLabel(btn, state === 'muted' ? 'micOff' : 'mic', state === 'on' ? 'Voice on' : state === 'muted' ? 'Muted' : 'Voice off');
     });
     tap.classList.toggle('hidden', !(app.voice && app.voice.needsTap));
   });
   btns.forEach((btn) => {
     btn.classList.remove('hidden');
-    btn.textContent = '🎤 Voice off';
+    setIconLabel(btn, 'mic', 'Voice off');
     btn.onclick = async () => {
       const v = app.voice;
       if (!v) return;
@@ -451,7 +452,7 @@ function renderLobby() {
   const fill = (slot, name, role, empty) => {
     const el = $(slot);
     el.classList.toggle('empty', !!empty);
-    $('.role-icon', el).textContent = empty ? '⏳' : ROLE[role].icon;
+    $('.role-icon', el).innerHTML = icon(empty ? 'user' : ROLE[role].icon);
     $('.pname', el).textContent = empty ? 'Waiting for a friend...' : name;
     $('.prole', el).textContent = empty ? 'Share the code above' : ROLE[role].name + ' – ' + ROLE[role].desc;
   };
@@ -627,7 +628,7 @@ async function startGame() {
     };
     const showWait = () => {
       const w = $('.wait-msg', pilotUI);
-      w.textContent = 'The navigator is planning the route... Get ready!';
+      w.textContent = 'Waiting for the navigator to start... Get ready!';
       w.classList.remove('hidden');
     };
     let minimap = null;
@@ -640,7 +641,7 @@ async function startGame() {
     const voiceBtn = $('#btn-npc-voice');
     voiceBtn.classList.toggle('hidden', !npc);
     if (voice) {
-      const syncVoice = () => { voiceBtn.textContent = voice.enabled ? '🔊 Voice' : '🔇 Voice'; };
+      const syncVoice = () => setIconLabel(voiceBtn, voice.enabled ? 'volume' : 'volumeOff', 'Voice');
       syncVoice();
       voiceBtn.onclick = () => { voice.enabled = !voice.enabled; Store.setSetting('npcVoice', voice.enabled); if (!voice.enabled) voice.stop(); syncVoice(); };
     }
@@ -695,46 +696,28 @@ async function startGame() {
     if (isSolo()) g.begin(); else showWait();
     if (npc) setSub("Hi! I can see the course for you. Listen to me and we'll fly through the gates.");
   } else {
-    const { RadarView } = await import('./radar.js');
+    // Navigatören sitter med i planet (helskärm 3D utan dimma) och har en liten minikarta.
+    const [{ RadarView }, { NavCockpit }] = await Promise.all([import('./radar.js'), import('./nav3d.js')]);
     if (!app.inGame) return;
-    const canvas = $('.radar', navUI);
-    const sendRoute = (route, press) => {
-      toPeer({ t: 'route', pts: route.map((p) => [Math.round(p[0] * 10) / 10, Math.round(p[1] * 10) / 10]) });
-      if (press) { toPeer({ t: 'gest', g: 'press' }); if (g.pip) g.pip.gesture('press'); }
-    };
-    const rv = new RadarView(canvas, level, { interactive: true, mode: 'overview', onRouteChange: (r) => sendRoute(r, true) });
-    const pipEl = $('.pip', navUI);
-    let pip = null;
-    try {
-      const { NavCockpit } = await import('./nav3d.js');
-      if (!app.inGame) { rv.destroy(); return; }
-      pip = new NavCockpit($('.view3d-holder', pipEl), level);
-      pip.start();
-    } catch (e) {
-      console.warn('Could not start the 3D window', e);
-      pipEl.classList.add('hidden');
-    }
-    const planBox = $('.plan-box', navUI);
+    const view = new NavCockpit($('.view3d-holder', navUI), level);
+    view.start();
+    const mini = new RadarView($('.nav-mini', navUI), level, { compact: true, mode: 'heading', zoomIdx: 1 });
+    mini.start();
+    const startPill = $('.start-pill', navUI);
     const aiMode = app.mode === 'navai';
     $('.ai-hint', navUI).classList.toggle('hidden', !aiMode);
-    $('.plan-text', navUI).textContent = aiMode
-      ? 'The AI pilot is flying blind and only does what you tell it. Hold ← / → (buttons or keys) to turn, Shift to brake. It keeps the altitude by itself.'
-      : 'Study the course. Tap the map to place your own route points (only you see them). The pilot is waiting for you.';
-    const toolBtn = (a) => $(`[data-act="${a}"]`, navUI);
-    const syncTools = () => {
-      toolBtn('mode').textContent = rv.mode === 'north' ? 'North up' : 'Nose up';
-      toolBtn('overview').classList.toggle('on', rv.mode === 'overview');
-    };
-    let modeBeforeOverview = 'heading';
+    $('.start-text', navUI).textContent = aiMode
+      ? 'The AI pilot flies blind and only does what you say. You see far ahead – steer early!'
+      : 'Your pilot is ready. You can see far ahead – call the turns early!';
     const g = {
-      role, level, view: rv, pip,
+      role, level, view, minimap: mini,
       msgEl: $('.center-msg', navUI),
       onState: (snap) => {
-        rv.setState(snap);
-        if (pip) pip.push(snap);
+        view.push(snap);
+        mini.setState(snap);
         updateHud(navUI, snap, level);
         countdownDisplay(g, snap);
-        updateGuide(navUI, rv);
+        updateGuide(navUI, mini);
         // Om "go" kom bort (t.ex. om pilotens vy inte hunnit laddas) – skicka igen
         if (g.goSentAt && snap.ph === 'waiting' && performance.now() - g.goSentAt > 1500) {
           g.goSentAt = performance.now();
@@ -742,61 +725,50 @@ async function startGame() {
         } else if (snap.ph !== 'waiting') g.goSentAt = 0;
       },
       onStar: (idx) => {
-        rv.collected.add(idx);
-        if (pip) pip.view.world.setStarCollected(idx);
+        mini.collected.add(idx);
+        view.view.world.setStarCollected(idx);
       },
       onRespawn: () => {
-        rv.resetTrail();
-        if (pip) pip.view.world.resetStars();
+        mini.resetTrail();
+        view.view.world.resetStars();
       },
-      planning: () => {
+      waitForStart: () => {
         g.goSentAt = 0;
-        if (pip) pip.view.world.resetStars();
-        rv.setMode('overview');
-        rv.resetTrail();
-        planBox.classList.remove('hidden');
-        $('.guide', navUI).classList.add('hidden');
-        syncTools();
+        view.view.world.resetStars();
+        mini.resetTrail();
+        startPill.classList.remove('hidden');
       },
       restart: (notify) => {
         $('#results').classList.add('hidden');
         if (notify) toPeer({ t: 'restart' });
-        g.planning();
+        g.waitForStart();
       },
     };
+    // sidopanelens ikonknappar och startknappen
     $$('[data-act]', navUI).forEach((b) => {
       b.onclick = () => {
         const a = b.dataset.act;
-        if (a === 'zoom-in') { if (rv.mode === 'overview') rv.setMode(modeBeforeOverview); rv.zoom(-1); }
-        if (a === 'zoom-out') { if (rv.mode === 'overview') rv.setMode(modeBeforeOverview); rv.zoom(1); }
-        if (a === 'mode') {
-          const base = rv.mode === 'overview' ? modeBeforeOverview : rv.mode;
-          modeBeforeOverview = base === 'heading' ? 'north' : 'heading';
-          rv.setMode(modeBeforeOverview);
+        if (a === 'map') { const off = $('.nav-mini', navUI).classList.toggle('off'); b.classList.toggle('on', !off); }
+        if (a === 'zoom-in') mini.zoom(-1);
+        if (a === 'zoom-out') mini.zoom(1);
+        if (a === 'view') {
+          const out = view.view.mode !== 'outside';
+          view.setMode(out ? 'outside' : 'auto');
+          b.classList.toggle('on', out);
         }
-        if (a === 'overview') {
-          if (rv.mode === 'overview') rv.setMode(modeBeforeOverview);
-          else { modeBeforeOverview = rv.mode; rv.setMode('overview'); }
-        }
-        if (a === 'undo') rv.undoRoute();
-        if (a === 'clear') rv.clearRoute();
-        if (a === 'pip' && pip) {
-          const hide = !pipEl.classList.contains('hidden');
-          pipEl.classList.toggle('hidden', hide);
-          b.classList.toggle('on', !hide);
-          pip.setPaused(hide);
-        }
+        if (a === 'guide') { const off = $('.guide', navUI).classList.toggle('off'); b.classList.toggle('on', !off); }
         if (a === 'go') {
           unlockAudio();
-          planBox.classList.add('hidden');
-          $('.guide', navUI).classList.remove('hidden');
-          rv.setMode(modeBeforeOverview);
+          startPill.classList.add('hidden');
           g.goSentAt = performance.now();
           toPeer({ t: 'go' });
         }
-        syncTools();
       };
     });
+    // återställ knapparnas lägen
+    $('.nav-mini', navUI).classList.remove('off');
+    $('.guide', navUI).classList.remove('off');
+    $$('.side-btn', navUI).forEach((b) => b.classList.toggle('on', ['map', 'guide'].includes(b.dataset.act)));
     // gester till piloten (med AI-pilot: håll inne för att styra)
     $$('[data-gest]', navUI).forEach((b) => {
       const k = b.dataset.gest;
@@ -805,47 +777,19 @@ async function startGame() {
         e.preventDefault();
         b.classList.add('down');
         toPeer({ t: 'gest', g: k });
-        if (pip) pip.gesture(k);
+        view.gesture(k);
         if (app.aiPilot) app.aiPilot.press(k);
       };
       const up = () => { b.classList.remove('down'); if (app.aiPilot) app.aiPilot.releaseDir(k); };
       b.onpointerup = up; b.onpointercancel = up; b.onpointerleave = up;
     });
-    if (pip) {
-      const pm = $('.pip-mode', pipEl);
-      pm.textContent = 'Outside';
-      pm.onclick = () => {
-        const out = pip.view.mode !== 'outside';
-        pip.setMode(out ? 'outside' : 'auto');
-        pm.textContent = out ? 'Cockpit' : 'Outside';
-      };
-    }
-    // Översiktskartan ska rymmas mellan panelerna
-    const updateInsets = () => {
-      const H = navUI.clientHeight;
-      const panelB = $('.nav-panel', navUI).getBoundingClientRect().bottom;
-      const tools = $('.nav-tools', navUI).getBoundingClientRect().top;
-      const plan = planBox.classList.contains('hidden') ? H : planBox.getBoundingClientRect().top;
-      const narrow = navUI.clientWidth < 640;
-      const pipOn = !pipEl.classList.contains('hidden');
-      const pr = pipEl.getBoundingClientRect();
-      rv.opts.altTop = panelB + 30;
-      if (rv.mode !== 'overview') return;
-      rv.insets = {
-        top: narrow ? panelB + 6 : 10,
-        bottom: H - Math.min(tools, plan, narrow && pipOn ? pr.top : H) + 6,
-        left: 64,
-        right: !narrow && pipOn ? pr.width + 20 : 10,
-      };
-    };
-    rv.beforeDraw = updateInsets;
     app.game = g;
 
     // Navigatör solo: en lokal AI-pilot som lyder pilknapparna
     if (aiMode) {
       const { LocalAIPilot } = await import('./aipilot.js');
       if (!app.inGame) return;
-      app.aiPilot = new LocalAIPilot(level, { onState: (s) => g.onState(s), onEvent: (e) => handleEvent(e) });
+      app.aiPilot = new LocalAIPilot(level, { onState: (st) => g.onState(st), onEvent: (e) => handleEvent(e) });
       app.aiPilot.start();
       const keyMap = { ArrowLeft: 'left', KeyA: 'left', ArrowRight: 'right', KeyD: 'right', ArrowUp: 'up', KeyW: 'up', ArrowDown: 'down', KeyS: 'down' };
       app._navKeys = (e) => {
@@ -855,7 +799,7 @@ async function startGame() {
         const k = keyMap[e.code];
         if (!k) return;
         e.preventDefault();
-        if (down && !e.repeat) { app.aiPilot.press(k); if (pip) pip.gesture(k); }
+        if (down && !e.repeat) { app.aiPilot.press(k); view.gesture(k); }
         if (!down) app.aiPilot.releaseDir(k);
         const btn = $(`[data-gest="${k}"]`, navUI);
         if (btn) btn.classList.toggle('down', down);
@@ -863,8 +807,7 @@ async function startGame() {
       window.addEventListener('keydown', app._navKeys);
       window.addEventListener('keyup', app._navKeys);
     }
-    rv.start();
-    g.planning();
+    g.waitForStart();
   }
 }
 
@@ -924,7 +867,6 @@ function endGame() {
   if (g) {
     try { g.view && g.view.destroy(); } catch (e) { console.warn(e); }
     try { g.minimap && g.minimap.destroy(); } catch (e) { console.warn(e); }
-    try { g.pip && g.pip.destroy(); } catch (e) { console.warn(e); }
   }
   if (app.aiPilot) { app.aiPilot.destroy(); app.aiPilot = null; }
   if (app._navKeys) {
@@ -939,10 +881,6 @@ function endGame() {
   $$('.gbtn').forEach((el) => el.classList.remove('down'));
   if (app.npcVoice) app.npcVoice.stop();
   $('#btn-npc-voice').classList.add('hidden');
-  const pipEl = $('.pip');
-  if (pipEl) pipEl.classList.remove('hidden');
-  const pipBtn = $('[data-act="pip"]');
-  if (pipBtn) pipBtn.classList.add('on');
   try { app.wakeLock && app.wakeLock.release(); } catch (_) {}
   app.wakeLock = null;
 }
@@ -965,6 +903,7 @@ function initGameMenu() {
 }
 
 // ---------------------------------------------------------------- start
+applyIcons();
 setSfxEnabled(Store.profile.sfx);
 initMenus();
 initSettings();

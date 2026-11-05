@@ -388,3 +388,62 @@ body.touch .key-hint { display: none; }
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after { animation-duration: .01ms !important; transition-duration: .01ms !important; }
 }
+
+/* ---------- ikoner ---------- */
+svg.i { width: 1.15em; height: 1.15em; flex: 0 0 auto; vertical-align: -0.2em; }
+.btn.icon svg.i { width: 24px; height: 24px; }
+.btn.huge svg.i { width: 26px; height: 26px; }
+.brand-plane svg.i { width: 76px; height: 76px; color: #fff; filter: drop-shadow(0 8px 16px rgba(0,0,0,.35)); transform: rotate(-35deg); }
+.hud-item small svg.i, .res-grid small svg.i { width: 11px; height: 11px; vertical-align: -1px; margin-right: 3px; color: var(--accent); }
+.mode-ico { display: flex; align-items: center; justify-content: center; width: 48px; height: 48px; border-radius: 14px; background: linear-gradient(160deg, #4a93f5, #1a5fd0); box-shadow: 0 6px 16px var(--blue-glow); }
+.mode-ico svg.i { width: 26px; height: 26px; color: #fff; }
+.player .role-icon { display: flex; align-items: center; justify-content: center; width: 42px; height: 42px; border-radius: 12px; background: rgba(44,123,229,.25); color: #cfe2ff; }
+.player .role-icon svg.i { width: 24px; height: 24px; }
+.player.empty .role-icon { background: rgba(255,255,255,.08); color: var(--muted); }
+.map-card .art { right: -6px; bottom: -10px; font-size: 0; opacity: .3; }
+.map-card .art svg.i { width: 78px; height: 78px; color: #fff; transform: rotate(-30deg); }
+.map-card.locked .lock svg.i { width: 30px; height: 30px; color: rgba(255,255,255,.7); }
+.game-menu .btn { height: 40px; }
+.game-menu .btn svg.i { width: 18px; height: 18px; }
+@media (max-width: 640px) { .game-menu .lbl { display: none; } }
+.voice-btn svg.i, #btn-npc-voice svg.i { width: 17px; height: 17px; }
+.gbtn svg.i { width: 26px; height: 26px; stroke-width: 2.8; }
+.audio-tap svg.i { width: 20px; height: 20px; }
+
+/* ---------- navigatören: med i planet ---------- */
+.nav-ui { background: #000; }
+.nav-ui .view3d-holder { position: absolute; inset: 0; }
+.nav-mini {
+  position: absolute; right: max(10px, env(safe-area-inset-right)); top: max(60px, calc(env(safe-area-inset-top) + 54px));
+  width: min(30vw, 200px); height: min(30vw, 200px); border-radius: 50%; border: 2px solid rgba(255,255,255,0.3);
+  box-shadow: 0 8px 26px rgba(0,0,0,.45); pointer-events: none; transition: opacity .25s, transform .25s var(--ease);
+}
+.nav-mini.off { opacity: 0; transform: scale(.85); }
+.nav-side {
+  position: absolute; left: max(10px, env(safe-area-inset-left)); top: 50%; transform: translateY(-50%);
+  display: flex; flex-direction: column; gap: 8px; padding: 6px; border-radius: 16px;
+  background: rgba(8,20,48,.55); border: 1px solid var(--line); -webkit-backdrop-filter: blur(8px); backdrop-filter: blur(8px);
+}
+.side-btn {
+  width: 42px; height: 42px; border-radius: 12px; border: 0; background: transparent; color: var(--muted);
+  display: flex; align-items: center; justify-content: center; cursor: pointer; transition: background .2s, color .2s, transform .12s;
+}
+.side-btn svg.i { width: 20px; height: 20px; }
+.side-btn:active { transform: scale(.92); }
+.side-btn.on { background: var(--blue); color: #fff; }
+.nav-ui .nav-gestures { top: auto; transform: none; right: max(10px, env(safe-area-inset-right)); bottom: max(12px, env(safe-area-inset-bottom)); }
+.nav-ui .guide.off { display: none; }
+.start-pill {
+  /* centrerad med marginaler (inte transform), så att pop-animationen inte flyttar den */
+  position: absolute; left: 0; right: 0; margin: 0 auto; width: fit-content; top: 52%; display: flex; align-items: center; gap: 12px;
+  background: rgba(8,20,48,.82); border: 1px solid var(--line); border-radius: 18px; padding: 10px 10px 10px 16px;
+  max-width: calc(100% - 32px); -webkit-backdrop-filter: blur(10px); backdrop-filter: blur(10px); animation: pop .4s var(--ease) both;
+}
+.start-text { font-size: 14px; color: var(--muted); }
+.nav-ui .ai-hint { left: max(10px, env(safe-area-inset-left)); transform: none; bottom: max(14px, env(safe-area-inset-bottom)); max-width: calc(100% - 210px); white-space: normal; }
+@media (max-width: 640px) {
+  .nav-mini { top: auto; bottom: max(150px, calc(env(safe-area-inset-bottom) + 140px)); width: 34vw; height: 34vw; }
+  .start-pill { flex-direction: column; text-align: center; padding: 14px; top: max(200px, calc(env(safe-area-inset-top) + 190px)); width: calc(100% - 32px); max-width: 360px; }
+  .nav-ui .ai-hint { max-width: calc(100% - 190px); }
+  .nav-side { top: auto; transform: none; bottom: max(76px, calc(env(safe-area-inset-bottom) + 70px)); }
+}

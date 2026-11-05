@@ -18,14 +18,14 @@
   <section id="screen-home" class="screen menu-screen active">
     <div class="menu-wrap">
       <div class="brand">
-        <div class="brand-plane" aria-hidden="true">✈️</div>
+        <div class="brand-plane" aria-hidden="true" data-icon="plane"></div>
         <h1 class="logo">PLAIN <span>DODGE!</span></h1>
         <p class="tagline">One flies blind. One sees everything. Dodge your way through together.</p>
       </div>
       <div class="menu-buttons">
-        <button id="btn-freeplay" class="btn primary huge" data-sfx><span class="ico">▶</span> Free Play</button>
-        <button id="btn-friends" class="btn secondary huge" data-sfx><span class="ico">👥</span> Play with Friends</button>
-        <button id="btn-settings" class="btn secondary" data-sfx><span class="ico">⚙️</span> Settings</button>
+        <button id="btn-freeplay" class="btn primary huge" data-sfx data-icon="play">Free Play</button>
+        <button id="btn-friends" class="btn secondary huge" data-sfx data-icon="users">Play with Friends</button>
+        <button id="btn-settings" class="btn secondary" data-sfx data-icon="settings">Settings</button>
       </div>
       <p id="home-status" class="status" role="status"></p>
       <div id="records" class="records"></div>
@@ -36,7 +36,7 @@
   <section id="screen-freeplay" class="screen menu-screen">
     <div class="menu-wrap wide">
       <header class="screen-head">
-        <button class="btn icon back" data-back="screen-home" aria-label="Back">‹</button>
+        <button class="btn icon back" data-back="screen-home" aria-label="Back" data-icon="back"></button>
         <h2>Free Play</h2>
         <span class="head-note">Pick a map</span>
       </header>
@@ -48,7 +48,7 @@
   <section id="screen-friends" class="screen menu-screen">
     <div class="menu-wrap">
       <header class="screen-head">
-        <button class="btn icon back" data-back="screen-home" aria-label="Back">‹</button>
+        <button class="btn icon back" data-back="screen-home" aria-label="Back" data-icon="back"></button>
         <h2>Play with Friends</h2>
       </header>
       <div class="card">
@@ -72,7 +72,7 @@
   <section id="screen-settings" class="screen menu-screen">
     <div class="menu-wrap">
       <header class="screen-head">
-        <button class="btn icon back" data-back="screen-home" aria-label="Back">‹</button>
+        <button class="btn icon back" data-back="screen-home" aria-label="Back" data-icon="back"></button>
         <h2>Settings</h2>
       </header>
       <div class="card settings">
@@ -109,7 +109,7 @@
   <section id="screen-lobby" class="screen menu-screen">
     <div class="menu-wrap">
       <header class="screen-head">
-        <button id="btn-leave" class="btn icon back" aria-label="Leave">‹</button>
+        <button id="btn-leave" class="btn icon back" aria-label="Leave" data-icon="back"></button>
         <h2>Lobby</h2>
       </header>
       <div class="card">
@@ -117,7 +117,7 @@
           <span class="label">Game code</span>
           <div id="lobby-code" class="code">······</div>
           <div class="code-actions">
-            <button id="btn-share" class="btn secondary small" data-sfx>Share link</button>
+            <button id="btn-share" class="btn secondary small" data-sfx data-icon="share">Share link</button>
             <span id="code-expiry" class="expiry"></span>
           </div>
         </div>
@@ -127,8 +127,8 @@
           <div class="player" id="slot-friend"><span class="role-icon"></span><div><b class="pname"></b><small class="prole"></small></div></div>
         </div>
         <div class="lobby-row">
-          <button id="btn-swap" class="btn secondary small host-only" data-sfx>⇄ Swap roles</button>
-          <button class="btn secondary small voice-btn hidden" title="Voice chat">🎤 Voice off</button>
+          <button id="btn-swap" class="btn secondary small host-only" data-sfx data-icon="swap">Swap roles</button>
+          <button class="btn secondary small voice-btn hidden" title="Voice chat">Voice off</button>
         </div>
         <h3>Map</h3>
         <div id="lobby-maps" class="lobby-maps"></div>
@@ -149,7 +149,7 @@
         <div class="hud-item"><small>TIME</small><b class="hud-time">0.0</b></div>
         <div class="hud-item"><small>GATE</small><b class="hud-gate">1/15</b></div>
         <div class="hud-item score"><small>SCORE</small><b class="hud-score">0</b></div>
-        <div class="hud-item"><small>⭐</small><b class="hud-star">0</b></div>
+        <div class="hud-item"><small data-icon="star">STARS</small><b class="hud-star">0</b></div>
       </div>
       <div class="hud-bottom">
         <div class="hud-item"><small>SPEED</small><b class="hud-speed">0</b></div>
@@ -171,20 +171,15 @@
       </div>
     </div>
 
-    <!-- Navigator view -->
+    <!-- Navigator view: med i planet (ingen dimma), liten minikarta -->
     <div id="nav-ui" class="nav-ui hidden">
-      <canvas class="radar"></canvas>
-      <div class="pip">
-        <div class="view3d-holder"></div>
-        <button class="pip-mode btn small">Outside</button>
-      </div>
+      <div class="view3d-holder"></div>
       <div class="nav-panel">
         <div class="nav-stats">
           <div class="hud-item"><small>TIME</small><b class="hud-time">0.0</b></div>
           <div class="hud-item"><small>GATE</small><b class="hud-gate">1/15</b></div>
           <div class="hud-item score"><small>SCORE</small><b class="hud-score">0</b></div>
-          <div class="hud-item"><small>SPEED</small><b class="hud-speed">0</b></div>
-          <div class="hud-item"><small>⭐</small><b class="hud-star">0</b></div>
+          <div class="hud-item"><small data-icon="star">STARS</small><b class="hud-star">0</b></div>
         </div>
         <div class="guide">
           <div class="guide-turn">—</div>
@@ -192,37 +187,35 @@
           <div class="guide-dist"></div>
         </div>
       </div>
-      <div class="nav-tools">
-        <button class="btn small" data-act="zoom-in" title="Zoom in">＋</button>
-        <button class="btn small" data-act="zoom-out" title="Zoom out">－</button>
-        <button class="btn small" data-act="mode">Nose up</button>
-        <button class="btn small" data-act="overview">Overview</button>
-        <button class="btn small" data-act="undo">Undo point</button>
-        <button class="btn small" data-act="clear">Clear route</button>
-        <button class="btn small on" data-act="pip" title="Show the cockpit">🎥</button>
+      <canvas class="nav-mini"></canvas>
+      <div class="nav-side" aria-label="View options">
+        <button class="side-btn on" data-act="map" title="Show / hide map" data-icon="map"></button>
+        <button class="side-btn" data-act="zoom-in" title="Zoom map in" data-icon="plus"></button>
+        <button class="side-btn" data-act="zoom-out" title="Zoom map out" data-icon="minus"></button>
+        <button class="side-btn" data-act="view" title="Cockpit / outside view" data-icon="camera"></button>
+        <button class="side-btn on" data-act="guide" title="Show / hide directions" data-icon="compass"></button>
       </div>
       <div class="nav-gestures" aria-label="Gestures to the pilot">
         <span></span>
-        <button class="gbtn" data-gest="up" title="Climb">↑</button>
+        <button class="gbtn" data-gest="up" title="Climb" data-icon="up"></button>
         <span></span>
-        <button class="gbtn" data-gest="left" title="Turn left">←</button>
-        <button class="gbtn" data-gest="down" title="Descend">↓</button>
-        <button class="gbtn" data-gest="right" title="Turn right">→</button>
+        <button class="gbtn" data-gest="left" title="Turn left" data-icon="left"></button>
+        <button class="gbtn" data-gest="down" title="Descend" data-icon="down"></button>
+        <button class="gbtn" data-gest="right" title="Turn right" data-icon="right"></button>
       </div>
-      <div class="ai-hint hidden">AI pilot: hold <b>←</b> <b>→</b> to turn · <b>Shift</b> to brake</div>
-      <div class="plan-box hidden">
-        <h3>Plan the route</h3>
-        <p class="plan-text">Study the course. Tap the map to place your own route points (only you see them). The pilot is waiting for you.</p>
-        <button class="btn primary big" data-act="go">Start the flight</button>
+      <div class="ai-hint hidden">Hold <b>←</b> <b>→</b> to steer · <b>Shift</b> brake</div>
+      <div class="start-pill hidden">
+        <span class="start-text">The pilot is ready. You see far ahead – shout early!</span>
+        <button class="btn primary" data-act="go" data-sfx data-icon="play">Start</button>
       </div>
       <div class="center-msg"></div>
     </div>
 
     <div class="game-menu">
-      <button class="btn small voice-btn hidden" title="Voice chat">🎤 Voice off</button>
-      <button id="btn-npc-voice" class="btn small hidden" title="NPC voice">🔊 Voice</button>
-      <button id="btn-restart" class="btn small">⟲ Restart</button>
-      <button id="btn-tolobby" class="btn small" aria-label="Exit">✕</button>
+      <button class="btn small voice-btn hidden" title="Voice chat">Voice off</button>
+      <button id="btn-npc-voice" class="btn small hidden" title="NPC voice">Voice</button>
+      <button id="btn-restart" class="btn small" data-icon="restart" title="Restart"><span class="lbl">Restart</span></button>
+      <button id="btn-tolobby" class="btn small" aria-label="Exit" data-icon="close"></button>
     </div>
 
     <div id="results" class="overlay hidden">
@@ -231,14 +224,14 @@
         <div class="res-score">0</div>
         <div class="res-label">points</div>
         <div class="res-grid">
-          <div><small>Time</small><b class="res-time">0.0 s</b></div>
-          <div><small>Stars</small><b class="res-stars">0</b></div>
-          <div><small>Perfect gates</small><b class="res-perfect">0</b></div>
-          <div><small>Time bonus</small><b class="res-tbonus">0</b></div>
+          <div><small data-icon="clock">Time</small><b class="res-time">0.0 s</b></div>
+          <div><small data-icon="star">Stars</small><b class="res-stars">0</b></div>
+          <div><small data-icon="target">Perfect gates</small><b class="res-perfect">0</b></div>
+          <div><small data-icon="zap">Time bonus</small><b class="res-tbonus">0</b></div>
         </div>
         <div class="res-details"></div>
         <div class="res-record"></div>
-        <button id="btn-again" class="btn primary big" data-sfx>Fly again</button>
+        <button id="btn-again" class="btn primary big" data-sfx data-icon="restart">Fly again</button>
         <button id="btn-res-lobby" class="btn secondary" data-sfx>Menu</button>
       </div>
     </div>
@@ -250,15 +243,15 @@
       <h2 class="sheet-title">Canyon Loop</h2>
       <p class="sheet-sub">Choose your role</p>
       <button class="mode-opt" data-mode="npc" data-sfx>
-        <span class="mode-ico">✈️</span>
+        <span class="mode-ico" data-icon="plane"></span>
         <span><b>Pilot</b><small>Fly blind through the fog. An NPC navigator guides you.</small></span>
       </button>
       <button class="mode-opt" data-mode="navai" data-sfx>
-        <span class="mode-ico">🧭</span>
-        <span><b>Navigator</b><small>See everything. Guide a blind AI pilot with the arrow buttons.</small></span>
+        <span class="mode-ico" data-icon="compass"></span>
+        <span><b>Navigator</b><small>Ride along in the cockpit – no fog for you. Shout directions to a blind AI pilot.</small></span>
       </button>
       <button class="mode-opt" data-mode="solo" data-sfx>
-        <span class="mode-ico">🗺️</span>
+        <span class="mode-ico" data-icon="map"></span>
         <span><b>Solo</b><small>Fly yourself with a small map in the corner.</small></span>
       </button>
       <button class="btn ghost sheet-cancel" data-sfx>Cancel</button>
@@ -272,7 +265,7 @@
       <button id="btn-ov" class="btn primary">OK</button>
     </div>
   </div>
-  <button id="btn-audio-tap" class="btn primary audio-tap hidden">🔊 Tap to hear your friend</button>
+  <button id="btn-audio-tap" class="btn primary audio-tap hidden" data-icon="volume">Tap to hear your friend</button>
   <audio id="remote-audio" autoplay playsinline></audio>
 
   <script src="js/lib/peerjs.min.js"></script>

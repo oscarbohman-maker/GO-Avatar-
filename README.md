@@ -3,7 +3,7 @@
 Ett samarbetsspel för två i webbläsaren, byggt för Safari på iPhone, iPad och Mac. Det fungerar också i alla moderna webbläsare. Spelet är på engelska.
 
 - **Piloten** sitter i cockpiten och flyger i förstaperson genom tät dimma, med bara cirka 44 m sikt.
-- **Navigatören** ser en radar med alla hinder, portar och stjärnor och guidar piloten med rösten och med pilgester.
+- **Navigatören** sitter med i planet (helskärm, utan dimma) och ser långt framåt. En liten minikarta visar närmaste hindren. Man kan inte planera hela rutten i förväg, utan måste ropa i tid: "vänster, snabbt!". Sidopanelen har ikonknappar för att visa/dölja kartan, zooma, byta till yttre kamera och visa/dölja vägledningen.
 
 Båda figurerna syns i cockpiten. Pilotens händer följer ratten och gasreglagen, och kompisen pekar och trycker på knappar.
 
