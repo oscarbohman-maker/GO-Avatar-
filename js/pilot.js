@@ -10,7 +10,7 @@ export class PilotView {
     this.onEvent = opts.onEvent || (() => {});
     this.onFrame = opts.onFrame || (() => {});
     this.session = new FlightSession(level, (e) => this.onEvent(e));
-    this.input = new Input(container, { invertY: opts.invertY });
+    this.input = new Input(container, { invertY: opts.invertY, sensitivity: opts.sensitivity });
     this.view = new View3D(container.querySelector('.view3d-holder'), level, { seat: 'pilot' });
     this.acc = 0;
     this.running = false;

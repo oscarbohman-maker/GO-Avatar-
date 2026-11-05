@@ -4,6 +4,7 @@ export class Input {
   constructor(root, opts = {}) {
     this.root = root;
     this.invertY = !!opts.invertY;
+    this.sensitivity = opts.sensitivity || 1;   // styrkänslighet från inställningarna
     this.keys = new Set();
     this.kx = 0; this.ky = 0;          // utjämnade tangentbordsvärden
     this.stick = { active: false, id: null, x: 0, y: 0, cx: 0, cy: 0 };
@@ -103,6 +104,7 @@ export class Input {
       x = curve(this.stick.x); y = curve(this.stick.y);
     }
     if (this.invertY) y = -y;
+    x *= this.sensitivity; y *= this.sensitivity;
 
     // blickriktning (fjädrar tillbaka framåt när man släpper)
     let ly = 0, lp = 0;

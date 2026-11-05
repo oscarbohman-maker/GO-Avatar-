@@ -1,10 +1,11 @@
 // Kör: node tests/sim.test.mjs
 // Kontrollerar att banorna går att flyga igenom och att reglerna fungerar.
 import assert from 'node:assert/strict';
-import { buildLevel, STAR_BONUS } from '../js/levels.js';
-import { FlightSession, STEP } from '../js/sim.js';
+import { buildLevel } from '../js/levels.js';
+import { FlightSession, STEP, POINTS, timeBonus } from '../js/sim.js';
 import { checkCollision, gateLocal, forward, gateCrossing } from '../js/physics.js';
 import { NpcNavigator, pursuitTarget } from '../js/npc.js';
+import { LocalAIPilot } from '../js/aipilot.js';
 
 let failures = 0;
 function test(name, fn) {
@@ -62,7 +63,9 @@ for (const id of ['test', 'demo']) {
     assert.equal(sess.phase, 'finished', `nådde port ${sess.nextGate + 1}, krascher: ${crashes.join(', ')}`);
     assert.equal(sess.crashes, 0, 'krascher: ' + crashes.join(', '));
     assert.equal(sess.misses, 0);
-    console.log(`     tid: ${sess.time.toFixed(1)} s, stjärnor: ${sess.stars.size}/${level.stars.length}`);
+    console.log(`     tid: ${sess.time.toFixed(1)} s, poäng: ${sess.points}, stjärnor: ${sess.stars.size}/${level.stars.length}, perfect: ${sess.perfects}`);
+    const fin = events.find((e) => e.kind === 'finish');
+    assert.ok(fin && fin.score === sess.points && fin.timeBonus === timeBonus(level, sess.time) && fin.timeBonus > 0);
   });
 
   test(`[${id}] banan är deterministisk (samma för båda spelarna)`, () => {
@@ -120,6 +123,30 @@ test('höjden ändras långsamt: full spak upp i 2 s ger högst ~25 m', () => {
   assert.ok(sess.plane.pitch <= 0.3 + 1e-9);
 });
 
+test('navigatör solo: AI-piloten kan guidas genom kanjonen med bara ← / →', () => {
+  const events = [];
+  const ai = new LocalAIPilot(test1, { onState: () => {}, onEvent: (e) => events.push(e) });
+  ai.handle({ t: 'go' });
+  // "navigatören" tittar på radarn och håller inne vänster/höger vid behov
+  for (let i = 0; i < 60 * 240 && ai.session.phase !== 'finished'; i++) {
+    const S = ai.session;
+    if (S.phase === 'fly') {
+      const p = S.plane, T = pursuitTarget(test1, S, 40);
+      const err = wrap(Math.atan2(-(T.x - p.x), -(T.z - p.z)) - p.yaw);
+      const want = -err * 3.5 + p.yawRate * 0.9;
+      if (want < -0.15) { if (!ai.held.left) ai.press('left'); ai.releaseDir('right'); }
+      else if (want > 0.15) { if (!ai.held.right) ai.press('right'); ai.releaseDir('left'); }
+      else { ai.releaseDir('left'); ai.releaseDir('right'); }
+      ai.setBrake(Math.abs(err) > 0.45);   // bromsa före skarpa svängar (Shift)
+    }
+    ai.frame(1 / 60);
+  }
+  const crashes = events.filter((e) => e.kind === 'crash').map((e) => e.what);
+  assert.equal(ai.session.phase, 'finished', `nådde port ${ai.session.nextGate + 1}, krascher: ${crashes.join(', ')}`);
+  assert.equal(ai.session.crashes, 0, 'krascher: ' + crashes.join(', '));
+  console.log(`     poäng: ${ai.session.points}, tid: ${ai.session.time.toFixed(1)} s`);
+});
+
 test('ringarna går att flyga igenom (även nära kanten)', () => {
   for (const g of demo.gates) {
     // punkt precis på ringens rör ska inte räknas som krasch
@@ -146,18 +173,50 @@ test('stjärnor ger bonus och räknas en gång', () => {
   assert.ok(sess.stars.has(st.idx), 'stjärnan samlades inte');
   assert.equal(events.filter((e) => e.kind === 'star' && e.idx === st.idx).length, 1);
   assert.equal(sess.stars.size, before + 1);
-  assert.ok(sess.flightTime > sess.stars.size * STAR_BONUS);
-  assert.ok(Math.abs(sess.time - (sess.flightTime + sess.penalty - sess.stars.size * STAR_BONUS)) < 1e-9);
+  // stjärnan gav poäng, tiden påverkas inte
+  assert.ok(events.some((e) => e.kind === 'star' && e.idx === st.idx && e.points === POINTS.star));
+  assert.ok(Math.abs(sess.time - (sess.flightTime + sess.penalty)) < 1e-9);
 });
 
-test('krasch ger straff och återstart', () => {
+test('krasch: man börjar om från starten (portar, stjärnor och tid nollställs)', () => {
   const events = [];
-  const sess = new FlightSession(demo, (e) => events.push(e));
+  const sess = new FlightSession(test1, (e) => events.push(e));
   sess.begin();
-  for (let i = 0; i < 600; i++) sess.step({ x: 0, y: -1, boost: false, brake: false });
-  assert.ok(sess.crashes >= 1);
-  assert.ok(events.some((e) => e.kind === 'crash'));
-  assert.ok(sess.penalty >= 3);
+  // flyg rakt ett tag (passerar port 1 och en stjärna), dyk sedan i marken
+  for (let i = 0; i < 60 * 7; i++) sess.step({ x: 0, y: 0 });
+  assert.ok(sess.nextGate >= 1, 'passerade ingen port');
+  for (let i = 0; i < 60 * 8 && sess.phase !== 'crashed'; i++) sess.step({ x: 0, y: -1 });
+  assert.equal(sess.phase, 'crashed');
+  assert.equal(sess.crashes, 1);
+  for (let i = 0; i < 60 * 2.2; i++) sess.step({ x: 0, y: 0 });
+  assert.equal(sess.phase, 'fly');
+  assert.ok(events.some((e) => e.kind === 'respawn' && e.full));
+  assert.equal(sess.nextGate, 0);
+  assert.equal(sess.stars.size, 0);
+  assert.equal(sess.points, 0);
+  assert.ok(sess.flightTime < 0.2, 'tiden nollställdes inte: ' + sess.flightTime);
+  const p = sess.plane, s0 = test1.start;
+  assert.ok(Math.hypot(p.x - s0.x, p.z - s0.z) < 10, 'inte vid starten');
+  assert.equal(sess.crashes, 1, 'antalet krascher ska finnas kvar');
+});
+
+test('ringar ger poäng, mer för "perfect" mitt i ringen', () => {
+  const g = test1.gates[0];
+  const n = forward(g.yaw);
+  const side = [n[2], 0, -n[0]];
+  const run = (off) => {
+    const events = [];
+    const sess = new FlightSession(test1, (e) => events.push(e));
+    sess.phase = 'fly';
+    Object.assign(sess.plane, { x: g.x - n[0] * 20 + side[0] * off, y: g.y, z: g.z - n[2] * 20 + side[2] * off, yaw: g.yaw, pitch: 0, roll: 0, rollRate: 0, pitchRate: 0 });
+    sess.grace = 5;
+    for (let i = 0; i < 40; i++) sess.step({ x: 0, y: 0 });
+    return events.find((e) => e.kind === 'pass');
+  };
+  const center = run(0), edge = run(g.r * 0.75);
+  assert.ok(center && center.perfect && center.bonus === POINTS.perfect, 'mitten: ' + JSON.stringify(center));
+  assert.ok(edge && !edge.perfect && edge.bonus === POINTS.gate, 'kanten: ' + JSON.stringify(edge));
+  assert.ok(POINTS.perfect > POINTS.gate && POINTS.gate > POINTS.star);
 });
 
 test('passera utanför ringen = missad port', () => {

@@ -2,13 +2,16 @@
 // vännen ansluter med koden. Ingen egen server behövs.
 /* global Peer */
 
-export const PROTOCOL_VERSION = 1;
-const PREFIX = 'blindflyg-v1-';
+export const PROTOCOL_VERSION = 2;
+const PREFIX = 'plaindodge-v2-';
+export const CODE_LENGTH = 6;
+export const CODE_TTL_MS = 24 * 60 * 60 * 1000;   // en kod gäller i ett dygn
+const CODE_KEY = 'plaindodge.hostcode.v1';
 const ALPHABET = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789'; // inga 0/O eller 1/I
 const HEARTBEAT_MS = 2000;
 const TIMEOUT_MS = 10000;
 
-export function randomCode(len = 4) {
+export function randomCode(len = CODE_LENGTH) {
   let s = '';
   const buf = new Uint32Array(len);
   crypto.getRandomValues(buf);
@@ -17,8 +20,20 @@ export function randomCode(len = 4) {
 }
 
 export function normalizeCode(c) {
-  return String(c || '').toUpperCase().replace(/[^A-Z0-9]/g, '').slice(0, 4);
+  return String(c || '').toUpperCase().replace(/[^A-Z0-9]/g, '').slice(0, CODE_LENGTH);
 }
+
+// Värdens kod sparas så att samma kod gäller i ett dygn (även om sidan laddas om).
+// Efter ett dygn går den ut och en ny kod skapas.
+export function loadHostCode(now = Date.now()) {
+  try {
+    const v = JSON.parse(localStorage.getItem(CODE_KEY) || 'null');
+    if (v && typeof v.code === 'string' && v.code.length === CODE_LENGTH && now - v.created < CODE_TTL_MS) return v;
+  } catch (_) {}
+  return null;
+}
+function saveHostCode(v) { try { localStorage.setItem(CODE_KEY, JSON.stringify(v)); } catch (_) {} }
+export function clearHostCode() { try { localStorage.removeItem(CODE_KEY); } catch (_) {} }
 
 // Möjlighet att peka på egen PeerJS-server, t.ex. ?peerHost=localhost&peerPort=9000&peerPath=/
 function peerOptions() {
@@ -68,11 +83,20 @@ export class Net {
 
   host(attempt = 0) {
     this.isHost = true;
-    this.code = randomCode();
+    const saved = attempt === 0 ? loadHostCode() : null;
+    this.code = saved ? saved.code : randomCode();
+    this.created = saved ? saved.created : Date.now();
     const peer = this._createPeer(PREFIX + this.code);
     this.peer = peer;
-    peer.on('open', () => this.emit('code', this.code));
+    peer.on('open', () => {
+      saveHostCode({ code: this.code, created: this.created });
+      this.emit('code', this.code);
+    });
     peer.on('connection', (conn) => {
+      if (this.expired) {
+        conn.on('open', () => { conn.send({ t: 'expired' }); setTimeout(() => conn.close(), 500); });
+        return;
+      }
       if (this.conn && this.conn.open) {
         conn.on('open', () => { conn.send({ t: 'full' }); setTimeout(() => conn.close(), 500); });
         return;
@@ -81,6 +105,7 @@ export class Net {
     });
     peer.on('error', (err) => {
       if (err.type === 'unavailable-id' && attempt < 5) {
+        // koden används redan (t.ex. i en annan flik) – ta en ny
         peer.destroy();
         this.host(attempt + 1);
         return;
@@ -92,6 +117,15 @@ export class Net {
       // men försök återansluta så att vännen kan gå med.
       if (!this.closed && !peer.destroyed) setTimeout(() => { try { peer.reconnect(); } catch (_) {} }, 1000);
     });
+  }
+
+  // Millisekunder kvar tills koden går ut
+  get expiresIn() { return this.created ? this.created + CODE_TTL_MS - Date.now() : CODE_TTL_MS; }
+
+  // Kallas när koden har gått ut: inga nya spelare kan gå med
+  expire() {
+    this.expired = true;
+    clearHostCode();
   }
 
   join(code) {

@@ -12,17 +12,16 @@ export function mulberry32(a) {
   };
 }
 
-export const WORLDS = [
-  { id: 'test', name: 'Test World', difficulty: 'Practice', levels: ['test'], available: true },
-  { id: 'skog', name: 'Forest Valley', difficulty: 'Easy', levels: ['demo'], available: true },
-  { id: 'berg', name: 'Mountain Pass', difficulty: 'Medium', levels: [], available: false },
-  { id: 'stad', name: 'Neon City', difficulty: 'Hard', levels: [], available: false },
-  { id: 'grotta', name: 'Crystal Cave', difficulty: 'Expert', levels: [], available: false },
-];
+// Free play: 20 kartplatser. Bara de som är klara går att välja, resten visas skuggade.
+const DIFF = ['Practice', 'Easy', 'Easy', 'Easy', 'Medium', 'Medium', 'Medium', 'Medium', 'Hard', 'Hard',
+  'Hard', 'Hard', 'Hard', 'Expert', 'Expert', 'Expert', 'Expert', 'Expert', 'Insane', 'Insane'];
+export const MAPS = Array.from({ length: 20 }, (_, i) => ({ n: i + 1, id: null, name: 'Coming soon', difficulty: DIFF[i], available: false }));
+Object.assign(MAPS[0], { id: 'test', name: 'Canyon Loop', available: true });
+Object.assign(MAPS[1], { id: 'demo', name: 'Training Flight', available: true });
 
 export const LEVEL_INFO = {
   test: { id: 'test', name: 'Canyon Loop', world: 'test', difficulty: 'Practice' },
-  demo: { id: 'demo', name: 'Demo: Training Flight', world: 'skog', difficulty: 'Easy' },
+  demo: { id: 'demo', name: 'Training Flight', world: 'skog', difficulty: 'Easy' },
 };
 
 function distToSegment2(px, pz, ax, az, bx, bz) {
@@ -210,6 +209,7 @@ function buildDemo() {
 
   return scaleLevel({
     id: 'demo',
+    par: 50,
     name: LEVEL_INFO.demo.name,
     start: { x: start[0], y: start[1], z: start[2], yaw: yawFromDir(G[0][0] - start[0], G[0][2] - start[2]) },
     gates,
@@ -336,6 +336,7 @@ function buildTest() {
   const bounds = { minX: Math.min(...xs) - 30, maxX: Math.max(...xs) + 30, minZ: Math.min(...zs) - 30, maxZ: Math.max(...zs) + 30 };
   return scaleLevel({
     id: 'test',
+    par: 40,
     name: LEVEL_INFO.test.name,
     start: { x: start[0], y: start[1], z: start[2], yaw: yawFromDir(G[0][0] - start[0], G[0][2] - start[2]) },
     gates, trees: [], decor, rocks, boxes, zones, path, bounds,
@@ -347,7 +348,6 @@ function buildTest() {
 
 // Belöningar: stjärnor längs den raka linjen mellan portarna (som är fri från hinder).
 // Flyger man igenom en stjärna dras 1 sekund av från tiden.
-export const STAR_BONUS = 1;
 export const STAR_RADIUS = 6;
 
 function addStars(level) {

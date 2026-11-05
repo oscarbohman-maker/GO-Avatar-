@@ -47,6 +47,7 @@ export function solveIK(root, target, l1, l2, pole, outMid, outEnd) {
 
 const cylGeo = new THREE.CylinderGeometry(1, 1, 1, 14);
 const sphGeo = new THREE.SphereGeometry(1, 18, 12);
+const capGeo = new THREE.SphereGeometry(1, 20, 10, 0, Math.PI * 2, 0, Math.PI / 2);   // övre halvsfär
 
 function placeBone(mesh, a, b, r) {
   const d = _d.subVectors(b, a);
@@ -57,8 +58,8 @@ function placeBone(mesh, a, b, r) {
 }
 
 export const AVATAR_STYLES = {
-  pilot: { jacket: 0x2f6fd1, jacketDark: 0x23539e, gloves: 0xc79a5b, pants: 0x3a3f4a, boots: 0x3b2a1e, skin: 0xf1c7a3, cap: 0x6b4426, headset: 0x26282c },
-  copilot: { jacket: 0xf2b33d, jacketDark: 0xc98f22, gloves: 0xf4f4f4, pants: 0x2c3e50, boots: 0x2b2b2b, skin: 0xd9a07a, cap: 0xeeeeee, headset: 0x26282c },
+  pilot: { jacket: 0x2f6fd1, jacketDark: 0x23539e, gloves: 0xc79a5b, pants: 0x3a3f4a, boots: 0x3b2a1e, skin: 0xf1c7a3, cap: 0x6b4426, headset: 0x26282c, patch: 0xf2c230, brow: 0x5a3a22 },
+  copilot: { jacket: 0xf2b33d, jacketDark: 0xc98f22, gloves: 0xf4f4f4, pants: 0x2c3e50, boots: 0x2b2b2b, skin: 0xd9a07a, cap: 0xeeeeee, headset: 0x26282c, patch: 0x2f6fd1, brow: 0x2b1d14 },
 };
 
 export class Avatar {
@@ -72,6 +73,8 @@ export class Avatar {
       jacket: mat(S.jacket), jacketDark: mat(S.jacketDark), gloves: mat(S.gloves, 0.6), pants: mat(S.pants),
       boots: mat(S.boots, 0.5), skin: mat(S.skin, 0.6), cap: mat(S.cap, 0.6), headset: mat(S.headset, 0.4),
       lens: new THREE.MeshStandardMaterial({ color: 0x9fd3ff, roughness: 0.1, metalness: 0.3 }),
+      eyeWhite: mat(0xffffff, 0.3), pupil: mat(0x1a1a1a, 0.2), brow: mat(S.brow, 0.8), mouth: mat(0x7a2e24, 0.6),
+      patch: mat(S.patch, 0.5), metal: new THREE.MeshStandardMaterial({ color: 0xc9ccd2, roughness: 0.3, metalness: 0.5 }),
     };
     this.mats = m;
     const g = new THREE.Group(); g.name = 'kropp_' + name; this.group = g;
@@ -79,18 +82,41 @@ export class Avatar {
 
     // kropp
     this.torso = mk(rbox(0.44, 0.58, 0.28, 0.1), m.jacket, `${name}_torso`);
+    // detaljer på jackan (följer med bålen)
+    const td = (geo, mt, nm, p) => { const o = new THREE.Mesh(geo, mt); o.name = nm; o.position.set(...p); this.torso.add(o); return o; };
+    td(new THREE.BoxGeometry(0.014, 0.5, 0.012), m.jacketDark, `${name}_dragkedja`, [0, -0.01, -0.141]);
+    td(rbox(0.1, 0.09, 0.014, 0.012), m.jacketDark, `${name}_brostficka`, [0.1, 0.11, -0.141]);
+    td(new THREE.BoxGeometry(0.03, 0.006, 0.006), m.metal, `${name}_fickknapp`, [0.1, 0.15, -0.15]);
+    td(rbox(0.08, 0.05, 0.012, 0.01), m.patch, `${name}_marke`, [-0.1, 0.14, -0.141]);
+    [-1, 1].forEach((k) => td(rbox(0.1, 0.025, 0.12, 0.01), m.jacketDark, `${name}_axelklaff_${k}`, [k * 0.17, 0.28, 0]));
     this.hips = mk(rbox(0.4, 0.18, 0.3, 0.07), m.pants, `${name}_hoft`);
+    const belt = new THREE.Mesh(new THREE.BoxGeometry(0.41, 0.045, 0.31), m.headset);
+    belt.name = `${name}_balte`; belt.position.set(0, 0.07, 0); this.hips.add(belt);
+    const buckle = new THREE.Mesh(new THREE.BoxGeometry(0.06, 0.04, 0.012), m.metal);
+    buckle.name = `${name}_spanne`; buckle.position.set(0, 0.07, -0.158); this.hips.add(buckle);
     this.collar = mk(rbox(0.24, 0.06, 0.18, 0.03), m.jacketDark, `${name}_krage`);
     this.neck = mk(cylGeo, m.skin, `${name}_hals`);
     // huvud (egen grupp så att det kan vridas)
     const head = new THREE.Group(); head.name = `${name}_huvud`; g.add(head); this.head = head;
     const hm = (geo, mt, nm, p, s, r) => { const o = new THREE.Mesh(geo, mt); o.name = nm; o.position.set(...p); if (s) o.scale.set(...s); if (r) o.rotation.set(...r); head.add(o); return o; };
     hm(sphGeo, m.skin, `${name}_ansikte`, [0, 0, 0], [0.125, 0.14, 0.13]);
-    hm(sphGeo, m.cap, `${name}_mossa`, [0, 0.035, 0.012], [0.135, 0.125, 0.14]);
-    hm(sphGeo, m.skin, `${name}_nasa`, [0, -0.01, -0.128], [0.022, 0.026, 0.022]);
-    // glasögon på mössan
-    hm(new THREE.TorusGeometry(0.135, 0.012, 8, 32), m.headset, `${name}_glasogonband`, [0, 0.07, 0.0], [1, 0.75, 1], [Math.PI / 2 - 0.25, 0, 0]);
-    [-1, 1].forEach((s) => hm(new THREE.CylinderGeometry(0.035, 0.035, 0.03, 20), m.lens, `${name}_glas_${s}`, [s * 0.05, 0.1, -0.11], null, [Math.PI / 2 - 0.6, 0, 0]));
+    // mössa/hjälm: en övre halvsfär, framkanten lite uppvinklad så att ansiktet syns
+    hm(capGeo, m.cap, `${name}_mossa`, [0, 0.02, 0.006], [0.137, 0.14, 0.142], [0.12, 0, 0]);
+    // ansikte: ögon (vitor + pupiller), ögonbryn, näsa och mun
+    [-1, 1].forEach((s) => {
+      hm(sphGeo, m.eyeWhite, `${name}_oga_${s}`, [s * 0.044, 0.004, -0.107], [0.021, 0.023, 0.016]);
+      hm(sphGeo, m.pupil, `${name}_pupill_${s}`, [s * 0.044, 0.002, -0.122], [0.011, 0.012, 0.006]);
+      hm(sphGeo, m.eyeWhite, `${name}_glans_${s}`, [s * 0.044 + 0.004, 0.007, -0.127], [0.0035, 0.0035, 0.002]);
+      hm(new THREE.BoxGeometry(0.038, 0.008, 0.01), m.brow, `${name}_ogonbryn_${s}`, [s * 0.045, 0.032, -0.118], null, [0.15, 0, s * -0.12]);
+    });
+    hm(sphGeo, m.skin, `${name}_nasa`, [0, -0.022, -0.13], [0.019, 0.024, 0.02]);
+    hm(new THREE.TorusGeometry(0.024, 0.0045, 6, 14, Math.PI), m.mouth, `${name}_mun`, [0, -0.058, -0.112], null, [0.25, 0, Math.PI]);
+    // flygglasögon uppe på pannan (på mössan) med band
+    hm(new THREE.TorusGeometry(0.139, 0.01, 8, 36), m.headset, `${name}_glasogonband`, [0, 0.075, 0.008], [1, 0.82, 1], [Math.PI / 2 - 0.3, 0, 0]);
+    [-1, 1].forEach((s) => {
+      hm(new THREE.CylinderGeometry(0.03, 0.03, 0.026, 20), m.lens, `${name}_glas_${s}`, [s * 0.046, 0.108, -0.106], null, [Math.PI / 2 - 0.75, 0, 0]);
+      hm(new THREE.TorusGeometry(0.031, 0.007, 6, 20), m.headset, `${name}_glasram_${s}`, [s * 0.046, 0.111, -0.112], null, [-0.75, 0, 0]);
+    });
     // hörlurar och mikrofon
     [-1, 1].forEach((s) => hm(new THREE.CylinderGeometry(0.05, 0.05, 0.04, 20), m.headset, `${name}_lur_${s}`, [s * 0.135, -0.005, 0.01], null, [0, 0, Math.PI / 2]));
     hm(new THREE.CylinderGeometry(0.008, 0.008, 0.13, 8), m.headset, `${name}_mikrofonarm`, [-0.1, -0.06, -0.06], null, [Math.PI / 2, 0.6, 0]);
@@ -249,7 +275,7 @@ export class Avatar {
   }
 
   dispose() {
-    this.group.traverse((o) => { if (o.geometry && o.geometry !== cylGeo && o.geometry !== sphGeo) o.geometry.dispose(); });
+    this.group.traverse((o) => { if (o.geometry && o.geometry !== cylGeo && o.geometry !== sphGeo && o.geometry !== capGeo) o.geometry.dispose(); });
     Object.values(this.mats).forEach((mt) => mt.dispose());
   }
 }

@@ -1,8 +1,9 @@
-// Spelregler för en flygning: faser, portar, krascher, straff och mål.
+// Spelregler för en flygning: faser, portar, krascher, belöningar och mål.
+// Kraschar man börjar man om från starten (tiden nollställs).
 // Körs hos piloten (auktoritativ) och skickas sedan till navigatören.
 
-import { stepFlight, checkPlaneCollision, gateCrossing, yawFromDir, forward, newPlane, FLIGHT } from './physics.js';
-import { STAR_BONUS, STAR_RADIUS } from './levels.js';
+import { stepFlight, checkPlaneCollision, gateCrossing, gateLocal, forward, newPlane, FLIGHT } from './physics.js';
+import { STAR_RADIUS } from './levels.js';
 
 // Kortaste avståndet från punkten c till sträckan a-b (3D)
 function segDist2(a, b, c) {
@@ -19,6 +20,11 @@ export const CRASH_TIME = 2.0;  // sekunder som planet tumlar efter en krasch
 const GRACE = 0.8;
 const COUNTDOWN = 3;
 const GRAV = 22;
+// Poäng: ringar ger mest, och ännu mer om man träffar mitten ("Perfect!").
+export const POINTS = { gate: 100, perfect: 250, star: 50, timeBonusPerSec: 25 };
+export const PERFECT_FRACTION = 0.4;   // inom 40 % av ringens radie = "Perfect!"
+// Tidsbonus i mål: 25 poäng för varje sekund under banans "par"-tid
+export function timeBonus(level, time) { return Math.max(0, Math.round(((level.par || 60) - time) * POINTS.timeBonusPerSec)); }
 
 export class FlightSession {
   constructor(level, onEvent = () => {}) {
@@ -28,24 +34,33 @@ export class FlightSession {
   }
 
   reset() {
-    const s = this.level.start;
-    this.plane = newPlane(s.x, s.y, s.z, s.yaw);
-    this.phase = 'waiting';   // waiting -> countdown -> fly <-> crashed -> finished
+    this.phase = 'waiting';   // waiting -> countdown -> fly <-> crashed -> (omstart) fly ... -> finished
     this.countdown = COUNTDOWN;
+    this.crashes = 0;         // antal krascher = antal omstarter
+    this.phaseTimer = 0;
+    this.lastCrash = null;
+    this._restartRun();
+    this.grace = 0;
+  }
+
+  // Ny runda från starten: portar, stjärnor, bonusar och tid nollställs
+  _restartRun() {
+    const s = this.level.start;
+    const t = this.plane ? this.plane.t : 0;
+    this.plane = newPlane(s.x, s.y, s.z, s.yaw);
+    this.plane.t = t;
     this.nextGate = 0;
     this.flightTime = 0;
     this.penalty = 0;
-    this.crashes = 0;
     this.misses = 0;
-    this.phaseTimer = 0;
-    this.grace = 0;
-    this.lastCrash = null;
+    this.points = 0;          // poäng under rundan (ringar + stjärnor)
+    this.perfects = 0;
     this.tumble = null;
     this.stars = new Set();
+    this.grace = GRACE;
   }
 
-  get bonus() { return this.stars.size * STAR_BONUS; }
-  get time() { return Math.max(0, this.flightTime + this.penalty - this.bonus); }
+  get time() { return this.flightTime + this.penalty; }
 
   begin() {
     if (this.phase !== 'waiting') return;
@@ -54,16 +69,6 @@ export class FlightSession {
     this.onEvent({ kind: 'countdown' });
   }
 
-  respawn() {
-    const L = this.level;
-    const from = this.nextGate > 0 ? L.gates[this.nextGate - 1] : L.start;
-    const to = L.gates[this.nextGate];
-    const t = this.plane.t;
-    this.plane = newPlane(from.x, from.y, from.z, yawFromDir(to.x - from.x, to.z - from.z));
-    this.plane.t = t;
-    this.tumble = null;
-    this.grace = GRACE;
-  }
 
   // Planet tumlar efter en krasch: studsar bakåt, snurrar och faller
   _startTumble() {
@@ -104,9 +109,8 @@ export class FlightSession {
     }
     if (this.phase === 'crashed') {
       this.phaseTimer -= dt;
-      this.flightTime += dt;
       this._stepTumble(dt);
-      if (this.phaseTimer <= 0) { this.respawn(); this.phase = 'fly'; this.onEvent({ kind: 'respawn' }); }
+      if (this.phaseTimer <= 0) { this._restartRun(); this.phase = 'fly'; this.onEvent({ kind: 'respawn', full: true }); }
       return;
     }
     if (this.phase !== 'fly') { this.plane.t += dt; return; }
@@ -124,20 +128,39 @@ export class FlightSession {
       if (this.stars.has(st.idx)) continue;
       if (segDist2(p0, p1, st) < STAR_RADIUS * STAR_RADIUS) {
         this.stars.add(st.idx);
-        this.onEvent({ kind: 'star', idx: st.idx, count: this.stars.size, total: stars.length });
+        this.points += POINTS.star;
+        this.onEvent({ kind: 'star', idx: st.idx, count: this.stars.size, total: stars.length, points: POINTS.star });
       }
     }
 
     const g = this.level.gates[this.nextGate];
     const cross = gateCrossing(g, p0, p1);
     if (cross === 'pass' || cross === 'miss') {
+      let bonus = 0, perfect = false;
       if (cross === 'miss') { this.misses++; this.penalty += this.level.penalties.miss; }
+      else {
+        // hur nära mitten passerade vi? (vid skärningen med portens plan)
+        const a = gateLocal(g, p0[0], p0[1], p0[2]).s, b = gateLocal(g, p1[0], p1[1], p1[2]).s;
+        const k = a !== b ? -a / (b - a) : 1;
+        const q = [p0[0] + (p1[0] - p0[0]) * k, p0[1] + (p1[1] - p0[1]) * k, p0[2] + (p1[2] - p0[2]) * k];
+        const radial = gateLocal(g, q[0], q[1], q[2]).radial;
+        perfect = radial < g.r * PERFECT_FRACTION;
+        bonus = perfect ? POINTS.perfect : POINTS.gate;
+        if (perfect) this.perfects++;
+        this.points += bonus;
+      }
       this.nextGate++;
       const finished = this.nextGate >= this.level.gates.length;
-      this.onEvent({ kind: cross, gate: g.idx, finished });
+      this.onEvent({ kind: cross, gate: g.idx, finished, bonus, perfect });
       if (finished) {
         this.phase = 'finished';
-        this.onEvent({ kind: 'finish', time: this.time, crashes: this.crashes, misses: this.misses, stars: this.stars.size, totalStars: stars.length });
+        const tb = timeBonus(this.level, this.time);
+        this.points += tb;
+        this.onEvent({
+          kind: 'finish', time: this.time, crashes: this.crashes, misses: this.misses,
+          stars: this.stars.size, totalStars: stars.length, perfects: this.perfects,
+          timeBonus: tb, score: this.points,
+        });
         return;
       }
     }
@@ -146,7 +169,6 @@ export class FlightSession {
     const hit = checkPlaneCollision(this.level, p);
     if (hit) {
       this.crashes++;
-      this.penalty += this.level.penalties.crash;
       this.phase = 'crashed';
       this.phaseTimer = CRASH_TIME;
       this.lastCrash = hit;
@@ -162,7 +184,7 @@ export class FlightSession {
     return {
       t: 'st', x: r(p.x), y: r(p.y), z: r(p.z), yw: r(p.yaw, 1000), pt: r(p.pitch, 1000), rl: r(p.roll, 1000),
       sp: r(p.speed, 10), ng: this.nextGate, tm: r(this.time, 10), cr: this.crashes, ms: this.misses,
-      ph: this.phase, cd: r(this.countdown, 10), sc: this.stars.size,
+      ph: this.phase, cd: r(this.countdown, 10), sc: this.stars.size, pts: this.points,
       // för kroppar, rattar och instrument hos navigatören
       ix: r(p.ix), iy: r(p.iy), th: p.throttle, ln: r(p.loadN), al: r(p.accLong, 10), ra: r(p.rollAcc, 10),
     };

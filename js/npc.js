@@ -150,10 +150,10 @@ export class NpcNavigator {
   onEvent(e, level) {
     switch (e.kind) {
       case 'go': return "Here we go! I'll tell you how to fly.";
-      case 'pass': return e.finished ? null : (e.gate % 2 === 0 ? `Nice! Gate ${e.gate + 1}.` : null);
+      case 'pass': return e.finished ? null : e.perfect ? 'Perfect! Right through the middle!' : (e.gate % 2 === 0 ? `Nice! Gate ${e.gate + 1}.` : null);
       case 'star': return Math.random() < 0.5 ? 'Nice, a star!' : null;
       case 'miss': return 'We missed the gate. On to the next one!';
-      case 'crash': return "Ouch! We'll go again from the last gate.";
+      case 'crash': return 'Ouch! Back to the start.';
       case 'finish': return `Finish! ${e.stars || 0} of ${e.totalStars || (level && level.stars ? level.stars.length : 0)} stars. Great flying!`;
       default: return null;
     }

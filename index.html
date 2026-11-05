@@ -6,75 +6,135 @@
   <meta name="apple-mobile-web-app-capable" content="yes">
   <meta name="mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
-  <meta name="theme-color" content="#0e1622">
-  <title>Blind Flight</title>
+  <meta name="apple-mobile-web-app-title" content="Plain Dodge!">
+  <meta name="theme-color" content="#0b1a3a">
+  <title>Plain Dodge!</title>
   <link rel="stylesheet" href="css/style.css">
 </head>
 <body>
+  <div class="sky-bg" aria-hidden="true"><span class="cloud c1"></span><span class="cloud c2"></span><span class="cloud c3"></span></div>
+
   <!-- ===== HOME ===== -->
-  <section id="screen-home" class="screen active">
-    <div class="panel home">
-      <h1 class="logo">BLIND <span>FLIGHT</span></h1>
-      <p class="tagline">One flies. One sees. Together you make it through the course.</p>
-
-      <label class="field">
-        <span>Your name</span>
-        <input id="name-input" maxlength="16" autocomplete="nickname" placeholder="e.g. Captain Oscar">
-      </label>
-
-      <button id="btn-create" class="btn primary big">Create game</button>
-
-      <div class="join-row">
-        <input id="code-input" maxlength="4" placeholder="CODE" autocapitalize="characters" autocomplete="off" spellcheck="false" inputmode="text">
-        <button id="btn-join" class="btn">Join</button>
+  <section id="screen-home" class="screen menu-screen active">
+    <div class="menu-wrap">
+      <div class="brand">
+        <div class="brand-plane" aria-hidden="true">✈️</div>
+        <h1 class="logo">PLAIN <span>DODGE!</span></h1>
+        <p class="tagline">One flies blind. One sees everything. Dodge your way through together.</p>
+      </div>
+      <div class="menu-buttons">
+        <button id="btn-freeplay" class="btn primary huge" data-sfx><span class="ico">▶</span> Free Play</button>
+        <button id="btn-friends" class="btn secondary huge" data-sfx><span class="ico">👥</span> Play with Friends</button>
+        <button id="btn-settings" class="btn secondary" data-sfx><span class="ico">⚙️</span> Settings</button>
       </div>
       <p id="home-status" class="status" role="status"></p>
-
-      <button id="btn-npc" class="btn npc-btn">🧑‍✈️ Test world with NPC navigator</button>
-      <button id="btn-solo" class="btn ghost">Try solo (pilot + map)</button>
-
       <div id="records" class="records"></div>
+    </div>
+  </section>
 
-      <details class="howto">
-        <summary>How to play</summary>
-        <ul>
-          <li><b>The pilot</b> flies the plane from the cockpit but can only see a short way ahead – the fog is thick.</li>
-          <li><b>The navigator</b> sees a radar with every obstacle and gate and tells the pilot how to fly: "turn right", "climb", "brake"...</li>
-          <li>Fly through the gates in order. Crash = +3 s, missed gate = +5 s, star = −1 s.</li>
-          <li>Talk to each other with the in-game voice chat, or call each other.</li>
-          <li><b>Pilot controls:</b> W/S or ↑/↓ = up/down, A/D or ←/→ = bank and turn, Space = throttle, Shift = brake (good before sharp turns), Q/E = look around. On mobile: stick on the left, buttons on the right, drag on the right side of the screen to look around.</li>
-          <li><b>The navigator</b> can point with the arrow buttons ← ↑ ↓ →. Your friend in the cockpit then points too. The route you draw shows up as faint dots for the pilot.</li>
-        </ul>
-      </details>
-      <label class="check"><input type="checkbox" id="invert-input"> Invert up/down (like a real flight stick)</label>
+  <!-- ===== FREE PLAY ===== -->
+  <section id="screen-freeplay" class="screen menu-screen">
+    <div class="menu-wrap wide">
+      <header class="screen-head">
+        <button class="btn icon back" data-back="screen-home" aria-label="Back">‹</button>
+        <h2>Free Play</h2>
+        <span class="head-note">Pick a map</span>
+      </header>
+      <div id="map-grid" class="map-grid"></div>
+    </div>
+  </section>
+
+  <!-- ===== PLAY WITH FRIENDS ===== -->
+  <section id="screen-friends" class="screen menu-screen">
+    <div class="menu-wrap">
+      <header class="screen-head">
+        <button class="btn icon back" data-back="screen-home" aria-label="Back">‹</button>
+        <h2>Play with Friends</h2>
+      </header>
+      <div class="card">
+        <label class="field">
+          <span>Your name</span>
+          <input id="name-input" maxlength="16" autocomplete="nickname" placeholder="e.g. Captain Oscar">
+        </label>
+        <button id="btn-create" class="btn primary big" data-sfx>Create game</button>
+        <div class="divider"><span>or join a friend</span></div>
+        <div class="join-row">
+          <input id="code-input" maxlength="6" placeholder="CODE" autocapitalize="characters" autocomplete="off" spellcheck="false" inputmode="text" aria-label="Game code">
+          <button id="btn-join" class="btn primary" data-sfx>Join</button>
+        </div>
+        <p id="friends-status" class="status" role="status"></p>
+        <p class="hint">Codes have 6 characters and stay valid for 24 hours.</p>
+      </div>
+    </div>
+  </section>
+
+  <!-- ===== SETTINGS ===== -->
+  <section id="screen-settings" class="screen menu-screen">
+    <div class="menu-wrap">
+      <header class="screen-head">
+        <button class="btn icon back" data-back="screen-home" aria-label="Back">‹</button>
+        <h2>Settings</h2>
+      </header>
+      <div class="card settings">
+        <h3>Profile</h3>
+        <label class="field"><span>Name</span><input id="set-name" maxlength="16" placeholder="Player"></label>
+
+        <h3>Controls</h3>
+        <label class="row-setting"><span>Invert up/down <small>like a real flight stick</small></span>
+          <input type="checkbox" id="set-invert" class="switch"></label>
+        <label class="row-setting col"><span>Steering sensitivity <b id="set-sens-val">100%</b></span>
+          <input type="range" id="set-sens" min="0.5" max="1.5" step="0.05"></label>
+        <div class="row-setting col"><span>Touch controls</span>
+          <div class="segmented" id="set-touch">
+            <button data-v="auto">Auto</button><button data-v="on">On</button><button data-v="off">Off</button>
+          </div>
+        </div>
+        <div class="keys">
+          <div><kbd>W</kbd><kbd>S</kbd> / <kbd>↑</kbd><kbd>↓</kbd> Up / down</div>
+          <div><kbd>A</kbd><kbd>D</kbd> / <kbd>←</kbd><kbd>→</kbd> Bank &amp; turn</div>
+          <div><kbd>Space</kbd> Throttle · <kbd>Shift</kbd> Brake</div>
+          <div><kbd>Q</kbd><kbd>E</kbd> Look around</div>
+        </div>
+
+        <h3>Audio</h3>
+        <label class="row-setting"><span>Sound effects</span><input type="checkbox" id="set-sfx" class="switch"></label>
+        <label class="row-setting"><span>NPC navigator voice</span><input type="checkbox" id="set-voice" class="switch"></label>
+
+        <button id="btn-reset-settings" class="btn ghost small" data-sfx>Reset settings</button>
+      </div>
     </div>
   </section>
 
   <!-- ===== LOBBY ===== -->
-  <section id="screen-lobby" class="screen">
-    <div class="panel lobby">
-      <div class="code-box">
-        <span class="label">Game code</span>
-        <div id="lobby-code" class="code">····</div>
-        <button id="btn-share" class="btn small">Share link</button>
+  <section id="screen-lobby" class="screen menu-screen">
+    <div class="menu-wrap">
+      <header class="screen-head">
+        <button id="btn-leave" class="btn icon back" aria-label="Leave">‹</button>
+        <h2>Lobby</h2>
+      </header>
+      <div class="card">
+        <div class="code-box">
+          <span class="label">Game code</span>
+          <div id="lobby-code" class="code">······</div>
+          <div class="code-actions">
+            <button id="btn-share" class="btn secondary small" data-sfx>Share link</button>
+            <span id="code-expiry" class="expiry"></span>
+          </div>
+        </div>
+        <p id="lobby-status" class="status" role="status"></p>
+        <div class="players">
+          <div class="player" id="slot-me"><span class="role-icon"></span><div><b class="pname"></b><small class="prole"></small></div></div>
+          <div class="player" id="slot-friend"><span class="role-icon"></span><div><b class="pname"></b><small class="prole"></small></div></div>
+        </div>
+        <div class="lobby-row">
+          <button id="btn-swap" class="btn secondary small host-only" data-sfx>⇄ Swap roles</button>
+          <button class="btn secondary small voice-btn hidden" title="Voice chat">🎤 Voice off</button>
+        </div>
+        <h3>Map</h3>
+        <div id="lobby-maps" class="lobby-maps"></div>
+        <button id="btn-start" class="btn primary big host-only" disabled data-sfx>Start flight</button>
+        <p class="guest-only waiting-text">Waiting for the host to start...</p>
       </div>
-      <p id="lobby-status" class="status" role="status"></p>
-
-      <div class="players">
-        <div class="player" id="slot-me"><span class="role-icon"></span><div><b class="pname"></b><small class="prole"></small></div></div>
-        <div class="player" id="slot-friend"><span class="role-icon"></span><div><b class="pname"></b><small class="prole"></small></div></div>
-      </div>
-      <div class="lobby-row">
-        <button id="btn-swap" class="btn small host-only">⇄ Swap roles</button>
-        <button class="btn small voice-btn hidden" title="Voice chat">🎤 Voice off</button>
-      </div>
-
-      <h3>Choose a world</h3>
-      <div id="world-list" class="worlds"></div>
-
-      <button id="btn-start" class="btn primary big host-only" disabled>Start flight</button>
-      <p class="guest-only waiting-text">Waiting for the host to start...</p>
-      <button id="btn-leave" class="btn ghost">Leave</button>
     </div>
   </section>
 
@@ -88,8 +148,8 @@
       <div class="hud-top">
         <div class="hud-item"><small>TIME</small><b class="hud-time">0.0</b></div>
         <div class="hud-item"><small>GATE</small><b class="hud-gate">1/15</b></div>
-        <div class="hud-item"><small>CRASHES</small><b class="hud-crash">0</b></div>
-        <div class="hud-item"><small>STARS</small><b class="hud-star">0</b></div>
+        <div class="hud-item score"><small>SCORE</small><b class="hud-score">0</b></div>
+        <div class="hud-item"><small>⭐</small><b class="hud-star">0</b></div>
       </div>
       <div class="hud-bottom">
         <div class="hud-item"><small>SPEED</small><b class="hud-speed">0</b></div>
@@ -122,7 +182,7 @@
         <div class="nav-stats">
           <div class="hud-item"><small>TIME</small><b class="hud-time">0.0</b></div>
           <div class="hud-item"><small>GATE</small><b class="hud-gate">1/15</b></div>
-          <div class="hud-item"><small>CRASHES</small><b class="hud-crash">0</b></div>
+          <div class="hud-item score"><small>SCORE</small><b class="hud-score">0</b></div>
           <div class="hud-item"><small>SPEED</small><b class="hud-speed">0</b></div>
           <div class="hud-item"><small>⭐</small><b class="hud-star">0</b></div>
         </div>
@@ -149,9 +209,10 @@
         <button class="gbtn" data-gest="down" title="Descend">↓</button>
         <button class="gbtn" data-gest="right" title="Turn right">→</button>
       </div>
+      <div class="ai-hint hidden">AI pilot: hold <b>←</b> <b>→</b> to turn · <b>Shift</b> to brake</div>
       <div class="plan-box hidden">
         <h3>Plan the route</h3>
-        <p>Study the course. Tap the map to place your own route points (only you see them). The pilot is waiting for you.</p>
+        <p class="plan-text">Study the course. Tap the map to place your own route points (only you see them). The pilot is waiting for you.</p>
         <button class="btn primary big" data-act="go">Start the flight</button>
       </div>
       <div class="center-msg"></div>
@@ -161,23 +222,51 @@
       <button class="btn small voice-btn hidden" title="Voice chat">🎤 Voice off</button>
       <button id="btn-npc-voice" class="btn small hidden" title="NPC voice">🔊 Voice</button>
       <button id="btn-restart" class="btn small">⟲ Restart</button>
-      <button id="btn-tolobby" class="btn small">✕</button>
+      <button id="btn-tolobby" class="btn small" aria-label="Exit">✕</button>
     </div>
 
     <div id="results" class="overlay hidden">
-      <div class="panel">
+      <div class="panel pop">
         <h2 class="res-title">Finished!</h2>
-        <div class="res-time"></div>
+        <div class="res-score">0</div>
+        <div class="res-label">points</div>
+        <div class="res-grid">
+          <div><small>Time</small><b class="res-time">0.0 s</b></div>
+          <div><small>Stars</small><b class="res-stars">0</b></div>
+          <div><small>Perfect gates</small><b class="res-perfect">0</b></div>
+          <div><small>Time bonus</small><b class="res-tbonus">0</b></div>
+        </div>
         <div class="res-details"></div>
         <div class="res-record"></div>
-        <button id="btn-again" class="btn primary big">Fly again</button>
-        <button id="btn-res-lobby" class="btn">Back to lobby</button>
+        <button id="btn-again" class="btn primary big" data-sfx>Fly again</button>
+        <button id="btn-res-lobby" class="btn secondary" data-sfx>Menu</button>
       </div>
     </div>
   </section>
 
+  <!-- Val av roll i Free Play -->
+  <div id="mode-sheet" class="overlay sheet hidden">
+    <div class="panel sheet-panel">
+      <h2 class="sheet-title">Canyon Loop</h2>
+      <p class="sheet-sub">Choose your role</p>
+      <button class="mode-opt" data-mode="npc" data-sfx>
+        <span class="mode-ico">✈️</span>
+        <span><b>Pilot</b><small>Fly blind through the fog. An NPC navigator guides you.</small></span>
+      </button>
+      <button class="mode-opt" data-mode="navai" data-sfx>
+        <span class="mode-ico">🧭</span>
+        <span><b>Navigator</b><small>See everything. Guide a blind AI pilot with the arrow buttons.</small></span>
+      </button>
+      <button class="mode-opt" data-mode="solo" data-sfx>
+        <span class="mode-ico">🗺️</span>
+        <span><b>Solo</b><small>Fly yourself with a small map in the corner.</small></span>
+      </button>
+      <button class="btn ghost sheet-cancel" data-sfx>Cancel</button>
+    </div>
+  </div>
+
   <div id="overlay-msg" class="overlay hidden">
-    <div class="panel">
+    <div class="panel pop">
       <h2 class="ov-title"></h2>
       <p class="ov-text"></p>
       <button id="btn-ov" class="btn primary">OK</button>

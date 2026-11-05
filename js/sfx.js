@@ -1,5 +1,7 @@
 // Små ljudeffekter med WebAudio (inga ljudfiler behövs).
 let ctx = null;
+let enabled = true;
+export function setSfxEnabled(v) { enabled = !!v; }
 
 export function unlockAudio() {
   try {
@@ -13,7 +15,7 @@ export function unlockAudio() {
 }
 
 function tone(freq, dur, type = 'sine', vol = 0.15, when = 0, slideTo = null) {
-  if (!ctx) return;
+  if (!ctx || !enabled) return;
   try {
     const t0 = ctx.currentTime + when;
     const o = ctx.createOscillator();
@@ -32,6 +34,8 @@ function tone(freq, dur, type = 'sine', vol = 0.15, when = 0, slideTo = null) {
 export const sfx = {
   tick() { tone(660, 0.12, 'square', 0.08); },
   go() { tone(990, 0.35, 'square', 0.1); },
+  perfect() { [990, 1320, 1760].forEach((f, i) => tone(f, 0.14, 'triangle', 0.12, i * 0.06)); },
+  click() { tone(520, 0.05, 'sine', 0.06); },
   star() { tone(1320, 0.08, 'triangle', 0.12); tone(1760, 0.12, 'triangle', 0.1, 0.06); },
   gate() { tone(880, 0.1, 'sine', 0.15); tone(1320, 0.15, 'sine', 0.12, 0.08); },
   miss() { tone(300, 0.25, 'sawtooth', 0.08); },
