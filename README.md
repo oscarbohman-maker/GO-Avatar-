@@ -2,7 +2,7 @@
 
 Ett samarbetsspel för två i webbläsaren (byggt för Safari på iPhone, iPad och Mac, men funkar i alla moderna webbläsare).
 
-- **Piloten** sitter i vänster stol i cockpiten. Före start är det ljust dagsljus, men så fort kameran går in i cockpiten tätnar en stark, ljusgrå dimma till cirka 60 m sikt. Kameran sitter bakom och mellan stolarna, så man ser både sig själv och kompisen utan att vrida sig. Navigatörens cockpitfönster ser genom dimman.
+- **Piloten** sitter i vänster stol i cockpiten. Före start är det ljust dagsljus, men så fort kameran går in i cockpiten tätnar en mycket tät, ljusgrå dimma (helt tät vid cirka 44 m, så även träden vid sidorna är halvt dolda). Vyn är förstaperson med hög FOV (95°), lätt vriden mot kompisen, som lutar sig in och pekar när navigatören ger en gest. Navigatörens cockpitfönster ser genom dimman.
 
 Spelet är på engelska, och NPC-navigatören pratar engelska.
 - **Navigatören** sitter i höger stol, ser en radar med alla hinder och portar och guidar piloten med rösten och med gester.

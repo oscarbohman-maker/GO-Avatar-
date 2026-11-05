@@ -103,7 +103,7 @@ export class View3D {
     if (Math.abs(cam.far - far) > 2) { cam.far = far; cam.updateProjectionMatrix(); }
     cam.position.copy(this._p).lerp(this._cp, b);
     cam.quaternion.copy(this._q).slerp(this._cq, b);
-    const fov = 60 + (78 - 60) * b;
+    const fov = 60 + (95 - 60) * b;   // hög FOV i cockpiten
     if (Math.abs(cam.fov - fov) > 0.01) { cam.fov = fov; cam.updateProjectionMatrix(); }
     rig.setView(b > 0.88 ? 'cockpit' : 'outside');
     this.renderer.render(this.world.scene, cam);

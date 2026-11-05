@@ -126,6 +126,7 @@ export class Avatar {
     this.lookYaw = 0; this.lookPitch = 0;
     this.lookTarget = { yaw: 0, pitch: 0 };
     this.lean = 0;
+    this.sideLean = 0;
     this.time = Math.random() * 10;
     // beräknade punkter
     this.shoulderC = V(); this.neckP = V(); this.headP = V(); this.eye = V();
@@ -156,9 +157,11 @@ export class Avatar {
     // Luta fram om händerna behöver nå längre
     const leanT = THREE.MathUtils.clamp(ctx.lean || 0, 0, 0.22);
     this.lean += (leanT - this.lean) * Math.min(1, dt * 6);
+    // luta åt sidan (t.ex. mot kompisen när man pekar)
+    this.sideLean +=((ctx.sideLean || 0) - this.sideLean) * Math.min(1, dt * 5);
 
     const pel = this.pelvis;
-    this.shoulderC.set(X + to.x, pel.y + 0.57 + to.y, pel.z - 0.24 + to.z - this.lean);
+    this.shoulderC.set(X + to.x + this.sideLean, pel.y + 0.57 + to.y, pel.z - 0.24 + to.z - this.lean);
     this.neckP.copy(this.shoulderC).add(V(0, 0.09, 0.01));
     // huvudet hänger i en egen, lite slappare fjäder
     const hTarget = V(this.neckP.x + to.x * 0.3, this.neckP.y + 0.18, this.neckP.z + to.z * 0.3);

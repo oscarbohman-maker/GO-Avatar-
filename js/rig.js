@@ -33,8 +33,9 @@ export class PlaneRig {
     this.copilot = new Avatar(0.6, AVATAR_STYLES.copilot, 'andrepilot');
     this.cockpit.add(this.pilot.group, this.copilot.group);
 
-    // Svag varm kabinlampa. Kameran sitter bakom stolarna, så båda figurerna
-    // (även ens egen) syns hela tiden.
+    // Förstaperson: det egna huvudet döljs (kameran sitter i det)
+    (localSeat === 'pilot' ? this.pilot : this.copilot).setHeadVisible(false);
+    // Svag varm kabinlampa
     const cabin = new THREE.PointLight(0xffd6a0, 2.2, 3.2, 2);
     cabin.position.set(0, 1.85, -0.15);
     this.cockpit.add(cabin);
@@ -203,7 +204,9 @@ export class PlaneRig {
     const cpHands = rest.map((v) => v.clone());
     const point = [false, false];
     let look = { yaw: 0, pitch: -0.15 };
-    const shL = V(X - 0.215, 1.16, 0.22);
+    let sideLean = 0;
+    if (this.gest) sideLean = -0.16;   // lutar sig mot piloten när den pekar – syns bättre
+    const shL = V(X - 0.215 + (this.copilot.sideLean || 0), 1.23, 0.22);
     if (this.gest) {
       this.gest.t -= dt;
       const dirs = { left: V(-0.75, 0.15, -0.65), right: V(0.25, 0.12, -0.96), up: V(-0.2, 0.92, -0.35), down: V(-0.3, -0.4, -0.86) };
@@ -243,24 +246,25 @@ export class PlaneRig {
     this.copilot.update(dt, {
       hands: cpHands, point, accel, shake,
       lean: this.copilot.reachDeficit(cpHands),
-      look, brace: crashed ? 1 : 0,
+      look, brace: crashed ? 1 : 0, sideLean,
     });
   }
 
-  // Cockpitkamerans position och riktning i världen. Kameran sitter bakom och
-  // mellan stolarna (lite utzoomad) så att man ser både sig själv och kompisen
-  // utan att vrida sig. look = { yaw, pitch } för att titta runt (Q/E eller dra).
+  // Cockpitkamerans position och riktning i världen: förstaperson från den egna
+  // figurens huvud (som döljs), en bit bakåt och lätt vriden mot kompisen så att
+  // den syns med den höga FOV:n. Riktningen följer planet, inte huvudets gung,
+  // så kameran är stabil. look = { yaw, pitch } för att titta runt (Q/E eller dra).
   eyePose(seat, outPos, outQuat, look) {
     this.root.updateMatrixWorld(true);
-    const side = seat === 'copilot' ? 1 : -1;
-    // en liten, väl dämpad rörelse från den egna figurens överkropp (stabil kamera)
-    const t = (seat === 'copilot' ? this.copilot : this.pilot).torsoSpring.p;
-    outPos.set(side * 0.12 + t.x * 0.3, 1.84 + t.y * 0.3, 1.28 + t.z * 0.3);
+    const av = seat === 'copilot' ? this.copilot : this.pilot;
+    const toFriend = seat === 'copilot' ? 1 : -1;     // + = åt höger i cockpiten
+    outPos.copy(av.eye).add(V(toFriend * 0.04, 0.03, 0.2));
     this.cockpit.localToWorld(outPos);
     this.cockpit.getWorldQuaternion(outQuat);
     const ly = look ? look.yaw : 0, lp = look ? look.pitch : 0;
     this._eyeQ = this._eyeQ || new THREE.Quaternion();
-    this._eyeQ.setFromEuler(new THREE.Euler(-0.15 + lp, ly, 0, 'YXZ'));
+    // positiv yaw = vänster, så piloten (vänster stol) vrids lite åt höger
+    this._eyeQ.setFromEuler(new THREE.Euler(-0.1 + lp, -toFriend * 0.2 + ly, 0, 'YXZ'));
     outQuat.multiply(this._eyeQ);
   }
 

@@ -372,8 +372,9 @@ export function buildLevel(id) {
   const level = b();
   addStars(level);
   level.decor = level.decor || [];
-  // Pilotens sikt i cockpiten: stark, ljusgrå dimma (ca 60 m) – piloten ska behöva sin navigatör
-  level.pilotFog = { color: 0xc6ced6, near: 2, far: 62 };
+  // Pilotens sikt i cockpiten: mycket tät, ljusgrå dimma som börjar direkt
+  // (helt tät vid ca 44 m, träden vid sidorna ~20 m bort är halvt dolda)
+  level.pilotFog = { color: 0xc6ced6, near: 0, far: 44 };
   level._grid = buildGrid(level);
   return level;
 }
