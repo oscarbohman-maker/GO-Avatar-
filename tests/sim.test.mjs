@@ -4,7 +4,7 @@ import assert from 'node:assert/strict';
 import { buildLevel, STAR_BONUS } from '../js/levels.js';
 import { FlightSession, STEP } from '../js/sim.js';
 import { checkCollision, gateLocal, forward, gateCrossing } from '../js/physics.js';
-import { NpcNavigator } from '../js/npc.js';
+import { NpcNavigator, pursuitTarget } from '../js/npc.js';
 
 let failures = 0;
 function test(name, fn) {
@@ -15,19 +15,14 @@ function test(name, fn) {
 const wrap = (a) => Math.atan2(Math.sin(a), Math.cos(a));
 const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
 
-// Enkel autopilot: siktar mot porten (lite före den), bromsar i skarpa svängar
+// Enkel autopilot: följer banans mittlinje en bit framåt, bromsar i skarpa svängar
 export function autopilot(level, sess) {
   const p = sess.plane;
-  const g = level.gates[sess.nextGate];
-  const n = forward(g.yaw);
-  const { s } = gateLocal(g, p.x, p.y, p.z);
-  const lead = clamp(-s * 0.3, 0, 14);
-  const tx = g.x - n[0] * lead, tz = g.z - n[2] * lead;
-  const dx = tx - p.x, dz = tz - p.z;
-  const want = Math.atan2(-dx, -dz);
-  const err = wrap(want - p.yaw);
+  const T = pursuitTarget(level, sess, 40);
+  const dx = T.x - p.x, dz = T.z - p.z;
+  const err = wrap(Math.atan2(-dx, -dz) - p.yaw);
   const dist = Math.hypot(dx, dz);
-  const wantPitch = clamp(Math.atan2(g.y - p.y, Math.max(dist, 8)), -0.6, 0.6);
+  const wantPitch = clamp(Math.atan2(T.y - p.y, Math.max(dist, 8)), -0.6, 0.6);
   return { x: clamp(-err * 3.5 + p.yawRate * 0.9, -1, 1), y: clamp((wantPitch - p.pitch) * 4, -1, 1), boost: false, brake: Math.abs(err) > 0.45 };
 }
 
@@ -81,21 +76,48 @@ for (const id of ['test', 'demo']) {
 const test1 = buildLevel('test');
 const demo = buildLevel('demo');
 
-test('NPC-navigatören guidar en "blind" pilot genom testvärlden', () => {
-  // Piloten gör exakt det NPC:n säger (riktning + höjd) – inget annat.
-  const npc = new NpcNavigator(test1);
-  let cmd = { turn: 0, climb: 0, brake: false };
-  const { sess, events } = fly(test1, (s) => {
-    const out = npc.update(1 / 60, s);
-    if (out && out.command) cmd = out.command;
-    // pilotens tolkning av senaste ordern
-    return { x: clamp(cmd.turn, -1, 1), y: clamp(cmd.climb * 2 - s.plane.pitch * 2, -1, 1), boost: false, brake: cmd.brake };
+for (const lv of [test1, demo]) {
+  test(`[${lv.id}] NPC-navigatören guidar en "blind" pilot genom banan`, () => {
+    // Piloten gör exakt det NPC:n senast sa (riktning + höjd) – inget annat.
+    const npc = new NpcNavigator(lv);
+    let cmd = { turn: 0, climb: 0, brake: false };
+    const { sess, events } = fly(lv, (s) => {
+      const out = npc.update(1 / 60, s);
+      if (out && out.command) cmd = out.command;
+      return { x: clamp(cmd.turn, -1, 1), y: clamp(cmd.climb * 2 - s.plane.pitch * 2, -1, 1), boost: false, brake: cmd.brake };
+    });
+    const crashes = events.filter((e) => e.kind === 'crash').map((e) => e.what);
+    assert.equal(sess.phase, 'finished', `nådde port ${sess.nextGate + 1}, krascher: ${crashes.join(', ')}`);
+    assert.equal(sess.crashes, 0, 'krascher: ' + crashes.join(', '));
+    assert.equal(sess.misses, 0, 'missade: ' + sess.misses);
+    console.log(`     tid: ${sess.time.toFixed(1)} s, stjärnor ${sess.stars.size}`);
   });
-  const crashes = events.filter((e) => e.kind === 'crash').map((e) => e.what);
-  assert.equal(sess.phase, 'finished', `nådde port ${sess.nextGate + 1}, krascher: ${crashes.join(', ')}`);
-  assert.equal(sess.crashes, 0, 'krascher: ' + crashes.join(', '));
-  assert.equal(sess.misses, 0, 'missade: ' + sess.misses);
-  console.log(`     tid: ${sess.time.toFixed(1)} s, krascher ${sess.crashes}, missade ${sess.misses}, stjärnor ${sess.stars.size}`);
+}
+
+test('testvärlden är en kanjon: väggar på båda sidor och alla portar på samma höjd', () => {
+  assert.ok(test1.boxes.length >= 18, 'väggar: ' + test1.boxes.length);
+  const ys = new Set(test1.gates.map((g) => g.y));
+  assert.equal(ys.size, 1);
+  // går man rakt åt sidan från varje port ska man träffa en vägg inom 30 m, åt båda hållen
+  for (const g of test1.gates) {
+    const n = forward(g.yaw);
+    for (const sgn of [-1, 1]) {
+      const side = [n[2] * sgn, 0, -n[0] * sgn];
+      let hit = null;
+      for (let d = 0; d <= 30 && !hit; d += 0.5) hit = checkCollision(test1, g.x + side[0] * d, g.y, g.z + side[2] * d, 0.5);
+      assert.ok(hit === 'kanjonväggen' || hit === 'en klippa', `port ${g.idx + 1}: ingen vägg åt sidan (${hit})`);
+    }
+  }
+});
+
+test('höjden ändras långsamt: full spak upp i 2 s ger högst ~25 m', () => {
+  const sess = new FlightSession(test1);
+  sess.begin();
+  for (let i = 0; i < 60 * 3.1; i++) sess.step({ x: 0, y: 0 });
+  const y0 = sess.plane.y;
+  for (let i = 0; i < 120; i++) sess.step({ x: 0, y: 1 });
+  assert.ok(sess.plane.y - y0 < 25, 'steg ' + (sess.plane.y - y0).toFixed(1) + ' m');
+  assert.ok(sess.plane.pitch <= 0.3 + 1e-9);
 });
 
 test('ringarna går att flyga igenom (även nära kanten)', () => {

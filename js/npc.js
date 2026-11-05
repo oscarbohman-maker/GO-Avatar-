@@ -1,7 +1,7 @@
 // NPC-navigatör: en datorstyrd andrepilot som guidar en "blind" pilot.
 // Den ser hela banan, letar efter hinder framför planet och säger korta
 // kommandon ("Sväng vänster och stig") samtidigt som figuren pekar.
-import { gateLocal, forward, checkCollision } from './physics.js';
+import { checkCollision } from './physics.js';
 
 const wrap = (a) => Math.atan2(Math.sin(a), Math.cos(a));
 const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
@@ -10,6 +10,31 @@ const DEG = 180 / Math.PI;
 // Spakutslag som motsvarar varje kommando (används också i testerna)
 const TURN = { sharp: 1, normal: 0.6, slight: 0.28, none: 0 };
 const CLIMB = { up: 0.22, down: -0.22, hold: 0 };   // önskad nosvinkel (rad)
+
+// Punkt längs banans mittlinje en bit framför planet ("pure pursuit").
+// Sträcka k går från path[k] till path[k+1], där port k sitter i slutet.
+export function pursuitTarget(level, sess, ahead = 55) {
+  const P = level.path, p = sess.plane;
+  let k = Math.min(sess.nextGate, P.length - 2);
+  const a = P[k], b = P[k + 1];
+  const vx = b[0] - a[0], vz = b[2] - a[2];
+  const L = Math.hypot(vx, vz);
+  let t = ((p.x - a[0]) * vx + (p.z - a[2]) * vz) / (L * L);
+  t = clamp(t, 0, 1);
+  let dist = ahead;   // gå framåt längs banan
+  let px = a[0] + vx * t, pz = a[2] + vz * t, py = a[1] + (b[1] - a[1]) * t;
+  let rem = (1 - t) * L;
+  while (dist > rem && k < P.length - 2) {
+    dist -= rem;
+    k++;
+    px = P[k][0]; pz = P[k][2]; py = P[k][1];
+    rem = Math.hypot(P[k + 1][0] - P[k][0], P[k + 1][2] - P[k][2]);
+  }
+  const nb = P[k + 1];
+  const segL = Math.hypot(nb[0] - px, nb[2] - pz) || 1;
+  const f = Math.min(1, dist / segL);
+  return { x: px + (nb[0] - px) * f, z: pz + (nb[2] - pz) * f, y: py + (nb[1] - py) * f };
+}
 
 export class NpcNavigator {
   constructor(level) {
@@ -22,14 +47,11 @@ export class NpcNavigator {
     this.blocked = false;
   }
 
-  // Siktpunkt: lite framför nästa port, så att planet kommer in rakt
+  // Siktpunkt: längs banans mittlinje en bit framåt (håller planet mitt i passagen)
   _target(sess) {
-    const p = sess.plane;
     const g = this.level.gates[sess.nextGate];
-    const n = forward(g.yaw);
-    const { s } = gateLocal(g, p.x, p.y, p.z);
-    const lead = clamp(-s * 0.3, 0, 14);
-    return { g, x: g.x - n[0] * lead, z: g.z - n[2] * lead };
+    const t = pursuitTarget(this.level, sess, 40);
+    return { g, x: t.x, z: t.z };
   }
 
   // Är det fritt längs en riktning? (vingbredd + marginal)
@@ -73,12 +95,14 @@ export class NpcNavigator {
       }
     }
 
-    const turnDeg = wrap(yaw - p.yaw) * DEG;   // + = vänster
-    const a = Math.abs(turnDeg);
-    // nära porten räknas även små vinkelfel, eftersom de ger meter i sidled
-    const lateral = dist * Math.sin(Math.min(a, 90) / DEG);
-    const level = a > 40 ? 'sharp' : a > 14 ? 'normal' : (a > 5 || (lateral > 3 && a > 1.5)) ? 'slight' : 'none';
-    const side = turnDeg > 0 ? 'left' : 'right';
+    const err = wrap(yaw - p.yaw);               // + = vänster
+    const a = Math.abs(err) * DEG;
+    // Önskat spakutslag. Tar hänsyn till hur mycket planet redan svänger,
+    // så att NPC:n säger "rakt fram" i tid i stället för att låta det svänga för långt.
+    const want = -err * 3.5 + p.yawRate * 0.9;   // + = höger
+    const w = Math.abs(want);
+    const level = (a > 40 && w > 0.7) || w > 0.85 ? 'sharp' : w > 0.45 ? 'normal' : w > 0.14 ? 'slight' : 'none';
+    const side = want < 0 ? 'left' : 'right';
     const dy = T.g.y - p.y;
     const climb = dy > 7 ? 'up' : dy < -7 ? 'down' : 'hold';
     const brake = (level === 'sharp' && p.speed > 34) || (this.blocked && dist < 60 && p.speed > 40);
@@ -92,7 +116,7 @@ export class NpcNavigator {
     const key = `${level === 'none' ? 'none' : level + side}|${climb}|${brake}|${this.blocked}`;
     const changed = key !== this.lastKey;
     const since = this.t - this.lastSay;
-    if ((changed && since > 0.9) || since > 4.5) {
+    if ((changed && since > 0.6) || since > 4.5) {
       this.lastKey = key;
       this.lastSay = this.t;
       return { say: this._phrase(level, side, climb, brake), gesture: this._gesture(level, side, climb), command: this.command };

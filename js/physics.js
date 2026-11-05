@@ -27,11 +27,11 @@ export const FLIGHT = {
   rollC: 7,          // dämpning (≈ kritisk) – ingen översväng
   turnG: 64,         // ger ca 1.35 rad/s vid full bank och marschfart
   maxYawRate: 1.9,
-  pitchRate: 0.75,
-  pitchResp: 4,
-  maxPitch: 0.7,
-  autoLevel: 1.2,
-  bankSink: 3,       // m/s sjunkhastighet vid full bank
+  pitchRate: 0.35,   // långsam höjdändring – spelet handlar mest om höger/vänster
+  pitchResp: 3,
+  maxPitch: 0.3,     // nosen kan bara peka lite upp eller ner (≈ 17°)
+  autoLevel: 2.2,    // planar ut snabbt av sig själv
+  bankSink: 0.6,     // m/s – svängar tappar nästan ingen höjd
   turbRoll: 0.3,     // rad/s² turbulens i rollen (svag)
   turbLift: 0.25,    // m/s vertikala vindbyar (svaga)
 };

@@ -11,7 +11,9 @@ Flyg genom portarna i rätt ordning, förbi träd, klippor, en kanjon, ett hål 
 
 ## Testvärld med NPC-navigatör
 
-Tryck **🧑‍✈️ Testvärld med NPC-navigatör** på startsidan för att flyga själv med en datorstyrd navigatör i stolen bredvid. Du flyger "blint", och NPC:n ser hela banan. Den letar efter hinder framför planet och säger vart du ska flyga ("Sväng vänster och stig", "Bromsa! Skarpt höger!", "Hinder framför!") med svensk röst och textruta. Samtidigt pekar den åt rätt håll i cockpiten. Rösten slås av och på med **🔊 Röst**. Testvärlden är en öppen äng med breda portar och många stjärnor.
+Tryck **🧑‍✈️ Testvärld med NPC-navigatör** på startsidan för att flyga själv med en datorstyrd navigatör i stolen bredvid. Du flyger "blint", och NPC:n ser hela banan. Den letar efter hinder framför planet och säger vart du ska flyga ("Sväng vänster och stig", "Bromsa! Skarpt höger!", "Hinder framför!") med svensk röst och textruta. Samtidigt pekar den åt rätt håll i cockpiten. Rösten slås av och på med **🔊 Röst**.
+
+Testvärlden **Kanjonslingan** är en slingrande kanjon med väggar ända upp till taket, så man kan inte flyga ur kurs. Den har trånga partier (32 m breda för ett plan med 13 m vingbredd), pelare att väja för och en skarp sväng där man måste bromsa. Alla portar ligger på samma höjd, så det handlar nästan bara om höger och vänster.
 
 ## Spela
 
@@ -31,6 +33,7 @@ Inget konto behövs. Namn, rekord och historik sparas lokalt i webbläsaren.
 
 - Planet svänger genom att banka, som ett riktigt plan (koordinerad sväng). Högre fart ger större svängradie, så det lönar sig att bromsa före skarpa svängar.
 - Lugn och förlåtande styrning: max ca 43° bankning, mjuk dämpad roll utan översväng, och tangenter och spak som ramper upp mjukt.
+- Höjden är svår att ändra: nosen kan bara peka cirka 17° upp eller ner och planar snabbt ut av sig själv. Svängar tappar nästan ingen höjd. Spelet handlar mest om höger och vänster.
 - Rollen och tippningen har tröghet, och nosen planar ut av sig själv.
 - Stigning kostar fart och dykning ger fart. I branta svängar tappar planet höjd om man inte drar upp.
 - Svag turbulens. Kameran är stabil, med bara små och väl dämpade rörelser i huvud och kropp.

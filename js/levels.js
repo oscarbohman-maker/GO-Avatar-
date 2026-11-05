@@ -21,7 +21,7 @@ export const WORLDS = [
 ];
 
 export const LEVEL_INFO = {
-  test: { id: 'test', name: 'Testflygning med stjärnor', world: 'test', difficulty: 'Övning' },
+  test: { id: 'test', name: 'Kanjonslingan', world: 'test', difficulty: 'Övning' },
   demo: { id: 'demo', name: 'Demo: Övningsflygningen', world: 'skog', difficulty: 'Lätt' },
 };
 
@@ -224,23 +224,66 @@ function buildDemo() {
   }, S);
 }
 
-// Testvärlden: öppen äng, breda portar, glesa träd och gott om stjärnor.
-// Tänkt för att öva med NPC-navigatören.
+// Väggar längs en slingrande rutt (kanjon). Insidan av väggarna följer rutten
+// på avståndet halfWidths[i] från mittlinjen, och hörnen sluts med gering (miter)
+// så att det aldrig blir glipor eller väggar som sticker in i korridoren.
+function canyonWalls(path, halfWidths, wallH, thick = 1.5, extend = 25) {
+  const boxes = [];
+  const segs = [];
+  for (let i = 0; i < path.length - 1; i++) {
+    const dx = path[i + 1][0] - path[i][0], dz = path[i + 1][2] - path[i][2];
+    const L = Math.hypot(dx, dz);
+    segs.push({ d: [dx / L, dz / L], n: [-dz / L, dx / L] });   // n = höger
+  }
+  for (const s of [-1, 1]) {
+    const pts = [];
+    const off = (i, p) => [p[0] + s * halfWidths[i] * segs[i].n[0], p[2] + s * halfWidths[i] * segs[i].n[1]];
+    const a0 = off(0, path[0]);
+    pts.push([a0[0] - segs[0].d[0] * extend, a0[1] - segs[0].d[1] * extend]);
+    for (let j = 1; j < segs.length; j++) {
+      // skärning mellan linje j-1 och linje j
+      const p1 = off(j - 1, path[j]), d1 = segs[j - 1].d;
+      const p2 = off(j, path[j]), d2 = segs[j].d;
+      const den = d1[0] * d2[1] - d1[1] * d2[0];
+      if (Math.abs(den) < 1e-4) { pts.push(p2); continue; }
+      const t = ((p2[0] - p1[0]) * d2[1] - (p2[1] - p1[1]) * d2[0]) / den;
+      pts.push([p1[0] + d1[0] * t, p1[1] + d1[1] * t]);
+    }
+    const last = segs.length - 1;
+    const aN = off(last, path[path.length - 1]);
+    pts.push([aN[0] + segs[last].d[0] * extend, aN[1] + segs[last].d[1] * extend]);
+    for (let k = 0; k < pts.length - 1; k++) {
+      const [ax, az] = pts[k], [bx, bz] = pts[k + 1];
+      const L = Math.hypot(bx - ax, bz - az);
+      if (L < 0.5) continue;
+      const dx = (bx - ax) / L, dz = (bz - az) / L;
+      const nx = -dz * s, nz = dx * s;   // utåt från korridoren
+      boxes.push({
+        x: (ax + bx) / 2 + nx * thick, y: wallH / 2, z: (az + bz) / 2 + nz * thick,
+        hx: thick, hy: wallH / 2, hz: L / 2, yaw: yawFromDir(dx, dz), kind: 'canyon',
+      });
+    }
+  }
+  return boxes;
+}
+
+// Testvärlden: en slingrande kanjon med höga väggar och trånga partier.
+// Alla portar ligger på samma höjd – det handlar om höger och vänster.
 function buildTest() {
   const S = WORLD_SCALE;
-  const rand = mulberry32(4242);
-  const start = [0, 15, 0];
+  const H = 15;            // flyghöjd (×2 = 30 m)
+  const start = [0, H, 0];
   const G = [
-    [0, 15, -80, 6.5],
-    [25, 18, -160, 6.5],
-    [0, 14, -240, 6.5],
-    [-30, 12, -320, 6.5],
-    [-10, 16, -400, 6.5],
-    [30, 20, -450, 6.5],
-    [75, 15, -430, 6.5],
-    [85, 12, -340, 6.5],
-    [65, 15, -220, 6.5],
-    [40, 15, -110, 7],      // mål
+    [0, H, -70, 6],
+    [20, H, -140, 6],
+    [0, H, -210, 5.5],
+    [-25, H, -270, 5.5],     // trångt parti
+    [-10, H, -340, 5.5],
+    [25, H, -390, 6],
+    [65, H, -370, 6],        // skarp högersväng – bromsa
+    [80, H, -290, 6],
+    [65, H, -210, 5.5],      // trångt parti
+    [60, H, -120, 6.5],      // mål
   ];
   const path = [start, ...G.map((g) => [g[0], g[1], g[2]])];
   const gates = G.map((g, i) => {
@@ -250,38 +293,31 @@ function buildTest() {
     const dz = next ? next[2] - prev[2] : g[2] - prev[2];
     return { idx: i, x: g[0], y: g[1], z: g[2], r: g[3], tube: 0.35, yaw: yawFromDir(dx, dz), finish: i === G.length - 1 };
   });
-  const bounds = { minX: -80, maxX: 140, minZ: -500, maxZ: 30 };
-  const nearGate = (x, z, d) => gates.some((g) => (g.x - x) ** 2 + (g.z - z) ** 2 < d * d);
-  const trees = [];
+  // korridorens halva bredd per sträcka (oskalad; ×2 i världen)
+  const half = [11, 10, 9, 8, 8, 9, 10, 10, 8, 9];
+  const boxes = canyonWalls(path, half, 50);
+  // pelare inne i kanjonen: man måste väja höger/vänster
   const rocks = [];
-  // glesa träd överallt (bra riktmärken), med stort avstånd till rutten
-  let tries = 0;
-  while (tries++ < 4000 && trees.length < 160) {
-    const x = bounds.minX - 40 + rand() * (bounds.maxX - bounds.minX + 80);
-    const z = bounds.minZ - 40 + rand() * (bounds.maxZ - bounds.minZ + 80);
-    const baseR = 1.6 + rand() * 1.4;
-    if (distToPath(path, x, z) < 14 + baseR) continue;
-    if (nearGate(x, z, 16)) continue;
-    if (trees.some((t) => (t.x - x) ** 2 + (t.z - z) ** 2 < (t.baseR + baseR + 4) ** 2)) continue;
-    trees.push({ x, z, baseR, h: 9 + rand() * 12, trunkH: 2 + rand() * 2, trunkR: 0.45 });
-  }
-  // några pelare att väja för, en bit från rutten
-  tries = 0;
-  while (tries++ < 2000 && rocks.length < 10) {
-    const x = bounds.minX + rand() * (bounds.maxX - bounds.minX);
-    const z = bounds.minZ + rand() * (bounds.maxZ - bounds.minZ);
-    const r = 1.4 + rand() * 1.2;
-    if (distToPath(path, x, z) < 10 + r) continue;
-    if (nearGate(x, z, 14 + r)) continue;
-    if (rocks.some((o) => (o.x - x) ** 2 + (o.z - z) ** 2 < (o.r + r + 6) ** 2)) continue;
-    rocks.push({ x, z, r, h: 25 + rand() * 15 });
-  }
-  const keptTrees = trees.filter((t) => !rocks.some((o) => (o.x - t.x) ** 2 + (o.z - t.z) ** 2 < (o.r + t.baseR + 1) ** 2));
+  const pillar = (seg, t, side, r = 1.4) => {
+    const a = path[seg], b = path[seg + 1];
+    const dx = b[0] - a[0], dz = b[2] - a[2], L = Math.hypot(dx, dz);
+    const nx = -dz / L, nz = dx / L;
+    const off = half[seg] - 2.0;    // nära väggen – smalnar av passagen
+    rocks.push({ x: a[0] + dx * t + nx * off * side, z: a[2] + dz * t + nz * off * side, r, h: 50 });
+  };
+  pillar(1, 0.5, 1); pillar(2, 0.45, -1); pillar(3, 0.5, 1); pillar(4, 0.4, -1); pillar(4, 0.75, 1);
+  pillar(7, 0.5, -1); pillar(8, 0.5, 1); pillar(9, 0.5, -1);
+  const zones = [
+    { type: 'Trångt', x: -15, z: -300, note: `Bredd ${16 * S} m` },
+    { type: 'Skarp sväng', x: 65, z: -385, note: 'Bromsa!' },
+  ];
+  const xs = path.map((p) => p[0]), zs = path.map((p) => p[2]);
+  const bounds = { minX: Math.min(...xs) - 30, maxX: Math.max(...xs) + 30, minZ: Math.min(...zs) - 30, maxZ: Math.max(...zs) + 30 };
   return scaleLevel({
     id: 'test',
     name: LEVEL_INFO.test.name,
     start: { x: start[0], y: start[1], z: start[2], yaw: yawFromDir(G[0][0] - start[0], G[0][2] - start[2]) },
-    gates, trees: keptTrees, rocks, boxes: [], zones: [], path, bounds,
+    gates, trees: [], rocks, boxes, zones, path, bounds,
     ceiling: 50,
     fog: { color: 0x141c2b, near: 16, far: 78 },
     penalties: { crash: 3, miss: 5 },
