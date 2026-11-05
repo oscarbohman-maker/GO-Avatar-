@@ -253,8 +253,20 @@ function onMessage(m) {
     case 'restart':
       if (app.game) app.game.restart(false);
       break;
+    case 'gest':
+      if (app.game && app.game.role === 'pilot' && GESTURES.includes(m.g)) app.game.gesture(m.g);
+      break;
+    case 'route':
+      if (app.game && app.game.role === 'pilot' && Array.isArray(m.pts)) {
+        const pts = m.pts.slice(0, 60).filter((p) => Array.isArray(p) && Number.isFinite(p[0]) && Number.isFinite(p[1]));
+        app.game.setRoute(pts);
+      }
+      break;
   }
 }
+
+const GESTURES = ['left', 'right', 'up', 'down', 'press'];
+const GESTURE_ICON = { left: '←', right: '→', up: '↑', down: '↓' };
 
 // ---------------------------------------------------------------- röst
 function setupVoice() {
@@ -426,6 +438,17 @@ async function startGame() {
       role, level,
       msgEl: $('.center-msg', pilotUI),
       begin: () => { pv.begin(); $('.wait-msg', pilotUI).classList.add('hidden'); },
+      gesture: (k) => {
+        pv.gesture(k);
+        const icon = GESTURE_ICON[k];
+        if (!icon) return;
+        const el = $('.gesture-hint', pilotUI);
+        el.textContent = icon;
+        el.classList.add('show');
+        clearTimeout(g._gt);
+        g._gt = setTimeout(() => el.classList.remove('show'), 1600);
+      },
+      setRoute: (pts) => pv.setRoute(pts),
       restart: (notify) => {
         pv.restart();
         $('#results').classList.add('hidden');
@@ -451,6 +474,7 @@ async function startGame() {
         const snap = S.snapshot();
         updateHud(pilotUI, snap, level);
         countdownDisplay(g, snap);
+        pilotUI.classList.toggle('outside', snap.ph !== 'fly');
         if (minimap) minimap.setState(snap);
         sendT += dt;
         if (app.net && sendT >= 0.05) { sendT = 0; app.net.send(snap); }
@@ -474,7 +498,23 @@ async function startGame() {
     const { RadarView } = await import('./radar.js');
     if (!app.inGame) return;
     const canvas = $('.radar', navUI);
-    const rv = new RadarView(canvas, level, { interactive: true, mode: 'overview' });
+    const sendRoute = (route, press) => {
+      if (!app.net) return;
+      app.net.send({ t: 'route', pts: route.map((p) => [Math.round(p[0] * 10) / 10, Math.round(p[1] * 10) / 10]) });
+      if (press) { app.net.send({ t: 'gest', g: 'press' }); if (g.pip) g.pip.gesture('press'); }
+    };
+    const rv = new RadarView(canvas, level, { interactive: true, mode: 'overview', onRouteChange: (r) => sendRoute(r, true) });
+    const pipEl = $('.pip', navUI);
+    let pip = null;
+    try {
+      const { NavCockpit } = await import('./nav3d.js');
+      if (!app.inGame) { rv.destroy(); return; }
+      pip = new NavCockpit($('.view3d-holder', pipEl), level);
+      pip.start();
+    } catch (e) {
+      console.warn('3D-fönstret kunde inte startas', e);
+      pipEl.classList.add('hidden');
+    }
     const planBox = $('.plan-box', navUI);
     const toolBtn = (a) => $(`[data-act="${a}"]`, navUI);
     const syncTools = () => {
@@ -483,10 +523,11 @@ async function startGame() {
     };
     let modeBeforeOverview = 'heading';
     const g = {
-      role, level, view: rv,
+      role, level, view: rv, pip,
       msgEl: $('.center-msg', navUI),
       onState: (snap) => {
         rv.setState(snap);
+        if (pip) pip.push(snap);
         updateHud(navUI, snap, level);
         countdownDisplay(g, snap);
         updateGuide(navUI, rv);
@@ -526,6 +567,12 @@ async function startGame() {
         }
         if (a === 'undo') rv.undoRoute();
         if (a === 'clear') rv.clearRoute();
+        if (a === 'pip' && pip) {
+          const hide = !pipEl.classList.contains('hidden');
+          pipEl.classList.toggle('hidden', hide);
+          b.classList.toggle('on', !hide);
+          pip.setPaused(hide);
+        }
         if (a === 'go') {
           unlockAudio();
           planBox.classList.add('hidden');
@@ -537,6 +584,23 @@ async function startGame() {
         syncTools();
       };
     });
+    // gester till piloten
+    $$('[data-gest]', navUI).forEach((b) => {
+      b.onclick = () => {
+        const k = b.dataset.gest;
+        if (app.net) app.net.send({ t: 'gest', g: k });
+        if (pip) pip.gesture(k);
+      };
+    });
+    if (pip) {
+      const pm = $('.pip-mode', pipEl);
+      pm.textContent = 'Utsida';
+      pm.onclick = () => {
+        const out = pip.view.mode !== 'outside';
+        pip.setMode(out ? 'outside' : 'auto');
+        pm.textContent = out ? 'Cockpit' : 'Utsida';
+      };
+    }
     // Översiktskartan ska rymmas mellan panelerna
     const updateInsets = () => {
       const H = navUI.clientHeight;
@@ -544,7 +608,16 @@ async function startGame() {
       const tools = $('.nav-tools', navUI).getBoundingClientRect().top;
       const plan = planBox.classList.contains('hidden') ? H : planBox.getBoundingClientRect().top;
       const narrow = navUI.clientWidth < 640;
-      rv.insets = { top: narrow ? panelB + 6 : 10, bottom: H - Math.min(tools, plan) + 6, left: 8, right: 64 };
+      const pipOn = !pipEl.classList.contains('hidden');
+      const pr = pipEl.getBoundingClientRect();
+      rv.opts.altTop = panelB + 30;
+      if (rv.mode !== 'overview') return;
+      rv.insets = {
+        top: narrow ? panelB + 6 : 10,
+        bottom: H - Math.min(tools, plan, narrow && pipOn ? pr.top : H) + 6,
+        left: 64,
+        right: !narrow && pipOn ? pr.width + 20 : 10,
+      };
     };
     rv.beforeDraw = updateInsets;
     app.game = g;
@@ -590,10 +663,16 @@ function endGame() {
   if (g) {
     try { g.view && g.view.destroy(); } catch (e) { console.warn(e); }
     try { g.minimap && g.minimap.destroy(); } catch (e) { console.warn(e); }
+    try { g.pip && g.pip.destroy(); } catch (e) { console.warn(e); }
   }
   app.game = null;
   $('#results').classList.add('hidden');
   $$('.center-msg').forEach((el) => { el.className = 'center-msg'; });
+  $$('.gesture-hint').forEach((el) => el.classList.remove('show'));
+  const pipEl = $('.pip');
+  if (pipEl) pipEl.classList.remove('hidden');
+  const pipBtn = $('[data-act="pip"]');
+  if (pipBtn) pipBtn.classList.add('on');
   try { app.wakeLock && app.wakeLock.release(); } catch (_) {}
   app.wakeLock = null;
 }

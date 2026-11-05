@@ -20,13 +20,13 @@ function autopilot(sess) {
   const g = level.gates[sess.nextGate];
   const n = forward(g.yaw);
   const { s } = gateLocal(g, p.x, p.y, p.z);
-  const lead = clamp(-s * 0.5, 0, 14);
+  const lead = clamp(-s * 0.3, 0, 14);
   const tx = g.x - n[0] * lead, tz = g.z - n[2] * lead;
   const dx = tx - p.x, dz = tz - p.z;
   const want = Math.atan2(-dx, -dz);
   const err = wrap(want - p.yaw);
   const dist = Math.hypot(dx, dz);
-  const wantPitch = clamp(Math.atan2(g.y - p.y, Math.max(dist, 4)), -0.6, 0.6);
+  const wantPitch = clamp(Math.atan2(g.y - p.y, Math.max(dist, 8)), -0.6, 0.6);
   return { x: clamp(-err * 3, -1, 1), y: clamp((wantPitch - p.pitch) * 4, -1, 1), boost: false, brake: false };
 }
 
@@ -41,14 +41,14 @@ test('inga hinder i portarnas mitt eller på startplatsen', () => {
   for (const g of level.gates) assert.equal(checkCollision(level, g.x, g.y, g.z), null, 'port ' + (g.idx + 1));
 });
 
-test('raka linjen mellan portarna är fri (minst 2 m fri radie)', () => {
+test('raka linjen mellan portarna är fri (minst 4 m fri radie)', () => {
   const pts = level.path;
   for (let i = 0; i < pts.length - 1; i++) {
     const [a, b] = [pts[i], pts[i + 1]];
     for (let k = 0; k <= 200; k++) {
       const t = k / 200;
       const x = a[0] + (b[0] - a[0]) * t, y = a[1] + (b[1] - a[1]) * t, z = a[2] + (b[2] - a[2]) * t;
-      const hit = checkCollision({ ...level, gates: [] }, x, y, z, 2);
+      const hit = checkCollision({ ...level, gates: [] }, x, y, z, 4);
       assert.equal(hit, null, `segment ${i}->${i + 1} vid t=${t.toFixed(2)} träffar ${hit}`);
     }
   }
@@ -58,7 +58,7 @@ test('autopilot klarar banan utan krasch och utan missade portar', () => {
   const events = [];
   const sess = new FlightSession(level, (e) => events.push(e));
   sess.begin();
-  for (let i = 0; i < 60 * 180 && sess.phase !== 'finished'; i++) sess.step(autopilot(sess), STEP);
+  for (let i = 0; i < 60 * 180 && sess.phase !== 'finished'; i++) sess.step(sess.phase === 'fly' ? autopilot(sess) : { x: 0, y: 0 }, STEP);
   const crashes = events.filter((e) => e.kind === 'crash').map((e) => e.what);
   assert.equal(sess.phase, 'finished', `nådde port ${sess.nextGate + 1}, krascher: ${crashes.join(', ')}`);
   assert.equal(sess.crashes, 0, 'krascher: ' + crashes.join(', '));
@@ -86,7 +86,7 @@ test('passera utanför ringen = missad port', () => {
   const g = level.gates[0];
   const n = forward(g.yaw);
   const side = [n[2], 0, -n[0]];
-  const off = 8;
+  const off = 16;
   const p0 = [g.x - n[0] + side[0] * off, g.y, g.z - n[2] + side[2] * off];
   const p1 = [g.x + n[0] + side[0] * off, g.y, g.z + n[2] + side[2] * off];
   assert.equal(gateCrossing(g, p0, p1), 'miss');

@@ -8,6 +8,8 @@ export class Input {
     this.kx = 0; this.ky = 0;          // utjämnade tangentbordsvärden
     this.stick = { active: false, id: null, x: 0, y: 0, cx: 0, cy: 0 };
     this.touchBoost = false; this.touchBrake = false;
+    this.look = { yaw: 0, pitch: 0 };        // titta runt i cockpiten
+    this.lookTouch = { active: false, id: null, sx: 0, sy: 0, yaw: 0, pitch: 0 };
     this._listeners = [];
 
     const on = (el, ev, fn, o) => { el.addEventListener(ev, fn, o); this._listeners.push([el, ev, fn, o]); };
@@ -46,6 +48,26 @@ export class Input {
       on(stickZone, 'pointerup', end);
       on(stickZone, 'pointercancel', end);
     }
+    // Titta runt: dra på högra delen av skärmen (pekskärm) eller håll Q/E/R (tangentbord)
+    const lookZone = root.querySelector('.look-zone');
+    if (lookZone) {
+      on(lookZone, 'pointerdown', (e) => {
+        if (this.lookTouch.active) return;
+        e.preventDefault();
+        lookZone.setPointerCapture && lookZone.setPointerCapture(e.pointerId);
+        this.lookTouch = { active: true, id: e.pointerId, sx: e.clientX, sy: e.clientY, yaw: 0, pitch: 0 };
+      });
+      on(lookZone, 'pointermove', (e) => {
+        const L = this.lookTouch;
+        if (!L.active || e.pointerId !== L.id) return;
+        L.yaw = Math.max(-1.5, Math.min(1.5, -(e.clientX - L.sx) / 120));
+        L.pitch = Math.max(-0.6, Math.min(0.6, -(e.clientY - L.sy) / 160));
+      });
+      const endLook = (e) => { if (e.pointerId === this.lookTouch.id) this.lookTouch.active = false; };
+      on(lookZone, 'pointerup', endLook);
+      on(lookZone, 'pointercancel', endLook);
+    }
+
     const hold = (sel, prop) => {
       const el = root.querySelector(sel);
       if (!el) return;
@@ -81,6 +103,16 @@ export class Input {
       x = curve(this.stick.x); y = curve(this.stick.y);
     }
     if (this.invertY) y = -y;
+
+    // blickriktning (fjädrar tillbaka framåt när man släpper)
+    let ly = 0, lp = 0;
+    if (k.has('KeyQ')) ly += 1.3;
+    if (k.has('KeyE')) ly -= 1.3;
+    if (k.has('KeyR')) lp += 0.5;
+    if (this.lookTouch.active) { ly = this.lookTouch.yaw; lp = this.lookTouch.pitch; }
+    const lr = Math.min(1, dt * 6);
+    this.look.yaw += (ly - this.look.yaw) * lr;
+    this.look.pitch += (lp - this.look.pitch) * lr;
     return {
       x: Math.max(-1, Math.min(1, x)),
       y: Math.max(-1, Math.min(1, y)),

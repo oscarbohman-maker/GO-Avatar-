@@ -41,7 +41,8 @@
           <li><b>Navigatören</b> ser en radar med alla hinder och portar och berättar hur piloten ska flyga: "sväng höger", "stig", "bromsa"...</li>
           <li>Flyg genom portarna i ordning. Krasch = +3 s, missad port = +5 s.</li>
           <li>Prata med varandra via röstchatten i spelet, eller ring varandra.</li>
-          <li><b>Styrning (pilot):</b> W/S eller ↑/↓ = upp/ner, A/D eller ←/→ = sväng, Mellanslag = boost, Shift = broms. På mobil/surfplatta: styrspak till vänster, knappar till höger.</li>
+          <li><b>Styrning (pilot):</b> W/S eller ↑/↓ = upp/ner, A/D eller ←/→ = banka och sväng, Mellanslag = gas, Shift = broms (bra före skarpa svängar), Q/E = titta runt. På mobil: styrspak till vänster, knappar till höger, dra på högra delen av skärmen för att titta runt.</li>
+          <li><b>Navigatören</b> kan peka med pilknapparna ← ↑ ↓ →. Då pekar kompisen i cockpiten. Rutten man ritar syns som svaga prickar för piloten.</li>
         </ul>
       </details>
       <label class="check"><input type="checkbox" id="invert-input"> Invertera upp/ner (som en riktig styrspak)</label>
@@ -92,8 +93,11 @@
         <div class="hud-item"><small>FART</small><b class="hud-speed">0</b></div>
         <div class="hud-item"><small>HÖJD</small><b class="hud-alt">0</b></div>
       </div>
+      <div class="look-zone" title="Dra för att titta runt"></div>
       <div class="center-msg"></div>
+      <div class="gesture-hint"></div>
       <div class="wait-msg hidden"></div>
+      <div class="key-hint">Q/E: titta runt · Mellanslag: gas · Shift: broms</div>
       <canvas class="minimap hidden"></canvas>
       <div class="touch-controls">
         <div class="stick-zone"><div class="stick-base"><div class="stick-knob"></div></div><span class="stick-hint">Dra för att styra</span></div>
@@ -107,6 +111,10 @@
     <!-- Navigatörens vy -->
     <div id="nav-ui" class="nav-ui hidden">
       <canvas class="radar"></canvas>
+      <div class="pip">
+        <div class="view3d-holder"></div>
+        <button class="pip-mode btn small">Utsida</button>
+      </div>
       <div class="nav-panel">
         <div class="nav-stats">
           <div class="hud-item"><small>TID</small><b class="hud-time">0.0</b></div>
@@ -127,6 +135,15 @@
         <button class="btn small" data-act="overview">Översikt</button>
         <button class="btn small" data-act="undo">Ångra punkt</button>
         <button class="btn small" data-act="clear">Rensa rutt</button>
+        <button class="btn small on" data-act="pip" title="Visa cockpiten">🎥</button>
+      </div>
+      <div class="nav-gestures" aria-label="Gester till piloten">
+        <span></span>
+        <button class="gbtn" data-gest="up" title="Stig">↑</button>
+        <span></span>
+        <button class="gbtn" data-gest="left" title="Sväng vänster">←</button>
+        <button class="gbtn" data-gest="down" title="Sjunk">↓</button>
+        <button class="gbtn" data-gest="right" title="Sväng höger">→</button>
       </div>
       <div class="plan-box hidden">
         <h3>Planera rutten</h3>

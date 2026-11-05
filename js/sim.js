@@ -1,12 +1,13 @@
 // Spelregler för en flygning: faser, portar, krascher, straff och mål.
 // Körs hos piloten (auktoritativ) och skickas sedan till navigatören.
 
-import { stepFlight, checkCollision, gateCrossing, yawFromDir, FLIGHT } from './physics.js';
+import { stepFlight, checkPlaneCollision, gateCrossing, yawFromDir, forward, newPlane, FLIGHT } from './physics.js';
 
 export const STEP = 1 / 60;
-const CRASH_FREEZE = 1.3;
+export const CRASH_TIME = 2.0;  // sekunder som planet tumlar efter en krasch
 const GRACE = 0.8;
 const COUNTDOWN = 3;
+const GRAV = 22;
 
 export class FlightSession {
   constructor(level, onEvent = () => {}) {
@@ -17,7 +18,7 @@ export class FlightSession {
 
   reset() {
     const s = this.level.start;
-    this.plane = { x: s.x, y: s.y, z: s.z, yaw: s.yaw, pitch: 0, roll: 0, speed: FLIGHT.baseSpeed };
+    this.plane = newPlane(s.x, s.y, s.z, s.yaw);
     this.phase = 'waiting';   // waiting -> countdown -> fly <-> crashed -> finished
     this.countdown = COUNTDOWN;
     this.nextGate = 0;
@@ -28,6 +29,7 @@ export class FlightSession {
     this.phaseTimer = 0;
     this.grace = 0;
     this.lastCrash = null;
+    this.tumble = null;
   }
 
   get time() { return this.flightTime + this.penalty; }
@@ -43,32 +45,64 @@ export class FlightSession {
     const L = this.level;
     const from = this.nextGate > 0 ? L.gates[this.nextGate - 1] : L.start;
     const to = L.gates[this.nextGate];
-    const p = this.plane;
-    p.x = from.x; p.y = from.y; p.z = from.z;
-    p.yaw = yawFromDir(to.x - from.x, to.z - from.z);
-    p.pitch = 0; p.roll = 0; p.speed = FLIGHT.baseSpeed;
+    const t = this.plane.t;
+    this.plane = newPlane(from.x, from.y, from.z, yawFromDir(to.x - from.x, to.z - from.z));
+    this.plane.t = t;
+    this.tumble = null;
     this.grace = GRACE;
+  }
+
+  // Planet tumlar efter en krasch: studsar bakåt, snurrar och faller
+  _startTumble() {
+    const p = this.plane;
+    const f = forward(p.yaw, p.pitch);
+    const v = Math.max(p.speed, 20);
+    const side = p.roll >= 0 ? 1 : -1;
+    this.tumble = {
+      vx: -f[0] * v * 0.18, vy: 9, vz: -f[2] * v * 0.18,
+      wr: side * (4 + v * 0.05), wp: -2.2, wy: side * 0.8,
+    };
+  }
+
+  _stepTumble(dt) {
+    const p = this.plane, T = this.tumble;
+    T.vy -= GRAV * dt;
+    p.x += T.vx * dt; p.y += T.vy * dt; p.z += T.vz * dt;
+    p.roll += T.wr * dt; p.pitch += T.wp * dt; p.yaw += T.wy * dt;
+    const damp = Math.exp(-0.6 * dt);
+    T.vx *= damp; T.vz *= damp;
+    if (p.y < 2.2) {
+      p.y = 2.2;
+      if (T.vy < 0) T.vy = -T.vy * 0.35;
+      T.wr *= 0.6; T.wp *= 0.6; T.wy *= 0.6; T.vx *= 0.5; T.vz *= 0.5;
+    }
+    p.speed = Math.hypot(T.vx, T.vy, T.vz);
+    p.rollAcc = T.wr * 3; p.accLong = -20; p.loadN = 1 + Math.sin(p.t * 20) * 0.8;
+    p.rollRate = T.wr; p.pitchRate = T.wp;
+    p.t += dt;
   }
 
   step(inp, dt = STEP) {
     if (this.phase === 'countdown') {
       this.countdown -= dt;
+      this.plane.t += dt;
       if (this.countdown <= 0) { this.phase = 'fly'; this.onEvent({ kind: 'go' }); }
       return;
     }
     if (this.phase === 'crashed') {
       this.phaseTimer -= dt;
       this.flightTime += dt;
-      if (this.phaseTimer <= 0) { this.respawn(); this.phase = 'fly'; }
+      this._stepTumble(dt);
+      if (this.phaseTimer <= 0) { this.respawn(); this.phase = 'fly'; this.onEvent({ kind: 'respawn' }); }
       return;
     }
-    if (this.phase !== 'fly') return;
+    if (this.phase !== 'fly') { this.plane.t += dt; return; }
 
     const p = this.plane;
     const p0 = [p.x, p.y, p.z];
-    stepFlight(p, inp, dt);
+    stepFlight(p, inp, dt, FLIGHT);
     this.flightTime += dt;
-    if (p.y > this.level.ceiling) { p.y = this.level.ceiling; if (p.pitch > 0) p.pitch = 0; }
+    if (p.y > this.level.ceiling) { p.y = this.level.ceiling; if (p.pitch > 0) { p.pitch *= 0.9; p.pitchRate = Math.min(0, p.pitchRate); } }
     const p1 = [p.x, p.y, p.z];
 
     const g = this.level.gates[this.nextGate];
@@ -86,13 +120,14 @@ export class FlightSession {
     }
 
     if (this.grace > 0) { this.grace -= dt; return; }
-    const hit = checkCollision(this.level, p.x, p.y, p.z);
+    const hit = checkPlaneCollision(this.level, p);
     if (hit) {
       this.crashes++;
       this.penalty += this.level.penalties.crash;
       this.phase = 'crashed';
-      this.phaseTimer = CRASH_FREEZE;
+      this.phaseTimer = CRASH_TIME;
       this.lastCrash = hit;
+      this._startTumble();
       this.onEvent({ kind: 'crash', what: hit });
     }
   }
@@ -105,6 +140,8 @@ export class FlightSession {
       t: 'st', x: r(p.x), y: r(p.y), z: r(p.z), yw: r(p.yaw, 1000), pt: r(p.pitch, 1000), rl: r(p.roll, 1000),
       sp: r(p.speed, 10), ng: this.nextGate, tm: r(this.time, 10), cr: this.crashes, ms: this.misses,
       ph: this.phase, cd: r(this.countdown, 10),
+      // för kroppar, rattar och instrument hos navigatören
+      ix: r(p.ix), iy: r(p.iy), th: p.throttle, ln: r(p.loadN), al: r(p.accLong, 10), ra: r(p.rollAcc, 10),
     };
   }
 }

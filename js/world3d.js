@@ -1,0 +1,159 @@
+// Banans 3D-värld: mark, träd, klippor, väggar, portar och navigatörens rutt.
+import * as THREE from './lib/three.module.min.js';
+
+function groundTexture() {
+  const c = document.createElement('canvas');
+  c.width = c.height = 128;
+  const g = c.getContext('2d');
+  g.fillStyle = '#4f7d3a';
+  g.fillRect(0, 0, 128, 128);
+  g.fillStyle = '#5a8a42';
+  g.fillRect(0, 0, 64, 64);
+  g.fillRect(64, 64, 64, 64);
+  let seed = 7;
+  const rnd = () => { seed = (seed * 16807) % 2147483647; return seed / 2147483647; };
+  for (let i = 0; i < 400; i++) {
+    g.fillStyle = rnd() < 0.5 ? 'rgba(30,60,20,0.25)' : 'rgba(140,180,90,0.18)';
+    g.fillRect(rnd() * 128, rnd() * 128, 2, 2);
+  }
+  const tex = new THREE.CanvasTexture(c);
+  tex.wrapS = tex.wrapT = THREE.RepeatWrapping;
+  tex.colorSpace = THREE.SRGBColorSpace;
+  tex.anisotropy = 4;
+  return tex;
+}
+
+const GATE_COLORS = { next: 0xffd23f, upcoming: 0xff8c42, passed: 0x3ddc84, finish: 0xffffff };
+
+export class World3D {
+  constructor(level) {
+    this.level = level;
+    const L = level;
+    const scene = new THREE.Scene();
+    this.scene = scene;
+    scene.background = new THREE.Color(L.fog.color);
+    scene.fog = new THREE.Fog(L.fog.color, L.fog.near, L.fog.far);
+
+    scene.add(new THREE.HemisphereLight(0xcfe3ff, 0x2d4a22, 1.7));
+    const sun = new THREE.DirectionalLight(0xfff2d6, 2.0);
+    sun.position.set(40, 80, 30);
+    scene.add(sun);
+
+    // mark
+    const B = L.bounds;
+    const size = 4200;
+    const tex = groundTexture();
+    tex.repeat.set(size / 20, size / 20);
+    const ground = new THREE.Mesh(new THREE.PlaneGeometry(size, size), new THREE.MeshLambertMaterial({ map: tex }));
+    ground.rotation.x = -Math.PI / 2;
+    ground.position.set((B.minX + B.maxX) / 2, 0, (B.minZ + B.maxZ) / 2);
+    scene.add(ground);
+
+    // träd (instansierade)
+    const trunkGeo = new THREE.CylinderGeometry(0.78, 1, 1, 6); trunkGeo.translate(0, 0.5, 0);
+    const coneGeo = new THREE.ConeGeometry(1, 1, 7); coneGeo.translate(0, 0.5, 0);
+    const trunks = new THREE.InstancedMesh(trunkGeo, new THREE.MeshLambertMaterial({ color: 0x6b4a2b }), L.trees.length);
+    const crowns = new THREE.InstancedMesh(coneGeo, new THREE.MeshLambertMaterial({ color: 0xffffff }), L.trees.length);
+    const m = new THREE.Matrix4(), q = new THREE.Quaternion(), pos = new THREE.Vector3(), scl = new THREE.Vector3();
+    const col = new THREE.Color();
+    L.trees.forEach((t, i) => {
+      m.compose(pos.set(t.x, 0, t.z), q, scl.set(t.trunkR, t.trunkH + 1, t.trunkR));
+      trunks.setMatrixAt(i, m);
+      m.compose(pos.set(t.x, t.trunkH, t.z), q, scl.set(t.baseR, t.h - t.trunkH, t.baseR));
+      crowns.setMatrixAt(i, m);
+      const v = ((Math.sin(t.x * 12.9898 + t.z * 78.233) * 43758.5453) % 1 + 1) % 1;
+      crowns.setColorAt(i, col.setHSL(0.27 + v * 0.08, 0.55, 0.22 + v * 0.1));
+    });
+    scene.add(trunks, crowns);
+
+    if (L.rocks.length) {
+      const rockGeo = new THREE.CylinderGeometry(1, 1.15, 1, 7); rockGeo.translate(0, 0.5, 0);
+      const rocks = new THREE.InstancedMesh(rockGeo, new THREE.MeshLambertMaterial({ color: 0x8a7f72 }), L.rocks.length);
+      L.rocks.forEach((o, i) => { m.compose(pos.set(o.x, 0, o.z), q, scl.set(o.r, o.h, o.r)); rocks.setMatrixAt(i, m); });
+      scene.add(rocks);
+    }
+
+    const boxMats = {
+      canyon: new THREE.MeshLambertMaterial({ color: 0x9b6b4a }),
+      wall: new THREE.MeshLambertMaterial({ color: 0xa04a3a }),
+      tunnel: new THREE.MeshLambertMaterial({ color: 0x5c5f66 }),
+      roof: new THREE.MeshLambertMaterial({ color: 0x45484e }),
+    };
+    for (const b of L.boxes) {
+      const mesh = new THREE.Mesh(new THREE.BoxGeometry(b.hx * 2, b.hy * 2, b.hz * 2), boxMats[b.kind] || boxMats.wall);
+      mesh.position.set(b.x, b.y, b.z);
+      mesh.rotation.y = b.yaw;
+      scene.add(mesh);
+    }
+
+    this.gateMeshes = L.gates.map((g) => {
+      const mat = new THREE.MeshLambertMaterial({ color: 0xffffff, emissive: 0x000000 });
+      const mesh = new THREE.Mesh(new THREE.TorusGeometry(g.r, g.tube, 10, 56), mat);
+      mesh.position.set(g.x, g.y, g.z);
+      mesh.rotation.y = g.yaw;
+      scene.add(mesh);
+      return mesh;
+    });
+    this._shownGate = -1;
+    this.updateGates(0);
+
+    // navigatörens rutt: små lysande prickar (syns bara nära, i dimman)
+    this.routeMat = new THREE.MeshBasicMaterial({ color: 0x4dd0ff, transparent: true, opacity: 0.45, depthWrite: false });
+    this.routeGeo = new THREE.SphereGeometry(0.45, 8, 6);
+    this.routeMesh = null;
+  }
+
+  updateGates(ng) {
+    if (ng === this._shownGate) return;
+    this._shownGate = ng;
+    this.gateMeshes.forEach((mesh, i) => {
+      const g = this.level.gates[i];
+      let c;
+      if (i < ng) c = GATE_COLORS.passed;
+      else if (i === ng) c = g.finish ? GATE_COLORS.finish : GATE_COLORS.next;
+      else c = g.finish ? GATE_COLORS.finish : GATE_COLORS.upcoming;
+      mesh.material.color.setHex(c);
+      mesh.material.emissive.setHex(i === ng ? c : 0x000000);
+      mesh.material.emissiveIntensity = i === ng ? 0.6 : 0;
+      mesh.material.transparent = i < ng;
+      mesh.material.opacity = i < ng ? 0.35 : 1;
+    });
+  }
+
+  // pts: [[x,z],...]. Höjden tas från närmaste port.
+  setRoute(pts) {
+    if (this.routeMesh) { this.scene.remove(this.routeMesh); this.routeMesh.dispose(); this.routeMesh = null; }
+    if (!pts || pts.length < 2) return;
+    const gates = this.level.gates;
+    const h = (x, z) => {
+      let best = gates[0], bd = Infinity;
+      for (const g of gates) { const d = (g.x - x) ** 2 + (g.z - z) ** 2; if (d < bd) { bd = d; best = g; } }
+      return best.y;
+    };
+    const dots = [];
+    for (let i = 0; i < pts.length - 1; i++) {
+      const [ax, az] = pts[i], [bx, bz] = pts[i + 1];
+      const ay = h(ax, az), by = h(bx, bz);
+      const len = Math.hypot(bx - ax, bz - az);
+      const n = Math.max(1, Math.floor(len / 6));
+      for (let k = 0; k < n; k++) {
+        const t = k / n;
+        dots.push([ax + (bx - ax) * t, ay + (by - ay) * t, az + (bz - az) * t]);
+      }
+    }
+    const last = pts[pts.length - 1];
+    dots.push([last[0], h(last[0], last[1]), last[1]]);
+    const inst = new THREE.InstancedMesh(this.routeGeo, this.routeMat, dots.length);
+    const m = new THREE.Matrix4();
+    dots.forEach((d, i) => { m.makeTranslation(d[0], d[1], d[2]); inst.setMatrixAt(i, m); });
+    this.routeMesh = inst;
+    this.scene.add(inst);
+  }
+
+  dispose() {
+    this.scene.traverse((o) => {
+      if (o.geometry) o.geometry.dispose();
+      if (o.material) (Array.isArray(o.material) ? o.material : [o.material]).forEach((mt) => { if (mt.map) mt.map.dispose(); mt.dispose(); });
+    });
+  }
+}

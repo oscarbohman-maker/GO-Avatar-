@@ -226,3 +226,36 @@ body.touch .touch-controls { display: block; }
 @media (max-width: 640px) {
   .hud-top { left: max(10px, env(safe-area-inset-left)); transform: none; }
 }
+
+/* ---------- cockpit / gester ---------- */
+.look-zone { position: absolute; right: 0; top: 64px; width: 45%; bottom: 210px; touch-action: none; }
+.key-hint { position: absolute; left: 12px; bottom: max(12px, env(safe-area-inset-bottom)); font-size: 12px; color: rgba(255,255,255,0.45); pointer-events: none; }
+body.touch .key-hint { display: none; }
+.gesture-hint {
+  position: absolute; right: max(18px, env(safe-area-inset-right)); top: 38%; font-size: 72px; font-weight: 900; color: var(--accent);
+  pointer-events: none; background: rgba(0,0,0,0.55); border-radius: 20px; padding: 0 18px; line-height: 1.2;
+  opacity: 0; transform: scale(0.6); transition: opacity 0.2s, transform 0.2s; filter: drop-shadow(0 4px 10px rgba(0,0,0,0.6));
+}
+.gesture-hint.show { opacity: 1; transform: scale(1); }
+.pip {
+  position: absolute; right: 10px; top: max(56px, calc(env(safe-area-inset-top) + 50px)); width: min(40vw, 380px); aspect-ratio: 16 / 10;
+  border-radius: 14px; overflow: hidden; border: 2px solid rgba(255,255,255,0.25); background: #000; box-shadow: 0 8px 30px rgba(0,0,0,0.5);
+}
+.pip .view3d-holder { position: absolute; inset: 0; }
+.pip-mode { position: absolute; right: 6px; bottom: 6px; background: rgba(0,0,0,0.6) !important; padding: 5px 9px !important; font-size: 12px !important; }
+.nav-gestures {
+  position: absolute; right: 10px; top: 50%; transform: translateY(-50%); display: grid; grid-template-columns: repeat(3, auto); gap: 6px;
+}
+.pip:not(.hidden) ~ .nav-gestures { top: auto; transform: none; bottom: max(110px, calc(env(safe-area-inset-bottom) + 100px)); }
+.gbtn {
+  width: 54px; height: 54px; border-radius: 16px; border: 0; background: rgba(31,45,68,0.92); font-size: 30px; font-weight: 900;
+  color: #fff; touch-action: manipulation;
+}
+.gbtn:active, .gbtn.down { background: var(--accent); }
+@media (max-width: 640px) {
+  .pip { top: auto; bottom: max(118px, calc(env(safe-area-inset-bottom) + 108px)); width: 52vw; }
+  .pip:not(.hidden) ~ .nav-gestures { bottom: max(118px, calc(env(safe-area-inset-bottom) + 108px)); right: auto; left: 10px; }
+  .gbtn { width: 46px; height: 46px; font-size: 26px; }
+  .look-zone { bottom: 230px; }
+}
+.pilot-ui.outside .crosshair { display: none; }

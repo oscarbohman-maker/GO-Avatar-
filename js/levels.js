@@ -75,7 +75,27 @@ function windowWall(boxes, cx, cz, width, height, holeY, holeHalf) {
   boxes.push({ x: cx, y: holeY + holeHalf + above / 2, z: cz, hx: holeHalf, hy: above / 2, hz: t, yaw: 0, kind: 'wall' });
 }
 
+// Banorna ritas i en grundskala och förstoras sedan så att flygplanet
+// (13 m vingbredd) får plats i portar och passager.
+export const WORLD_SCALE = 2;
+
+function scaleLevel(L, S) {
+  const k = (o, keys) => keys.forEach((key) => { if (o[key] != null) o[key] *= S; });
+  k(L.start, ['x', 'y', 'z']);
+  L.gates.forEach((g) => k(g, ['x', 'y', 'z', 'r', 'tube']));
+  L.trees.forEach((t) => k(t, ['x', 'z', 'baseR', 'h', 'trunkH', 'trunkR']));
+  L.rocks.forEach((o) => k(o, ['x', 'z', 'r', 'h']));
+  L.boxes.forEach((b) => k(b, ['x', 'y', 'z', 'hx', 'hy', 'hz']));
+  L.zones.forEach((zn) => k(zn, ['x', 'z']));
+  L.path = L.path.map((p) => p.map((v) => v * S));
+  k(L.bounds, ['minX', 'maxX', 'minZ', 'maxZ']);
+  L.ceiling *= S;
+  k(L.fog, ['near', 'far']);
+  return L;
+}
+
 function buildDemo() {
+  const S = WORLD_SCALE;
   const rand = mulberry32(1337);
   const start = [0, 15, 0];
   // Portar: [x, y, z, radie]
@@ -91,8 +111,8 @@ function buildDemo() {
     [95, 16, -398, 5],     // hårnål in mot kanjonen
     [95, 12, -315, 4.5],   // i kanjonen
     [95, 10, -235, 4.5],
-    [95, 13, -200, 3.6],   // i hålet i väggen
-    [95, 10, -140, 4],     // i tunneln
+    [95, 13, -200, 4.6],   // i hålet i väggen
+    [95, 10, -140, 4.5],   // i tunneln
     [85, 16, -55, 5],
     [45, 15, -15, 5.5],    // mål
   ];
@@ -111,14 +131,14 @@ function buildDemo() {
   const boxes = [];
   const zones = [];
   // Kanjon: smal passage med höga klippväggar
-  corridor(boxes, 95, -368, -255, 7.5, 38, null, 'canyon');
-  zones.push({ type: 'Kanjon', x: 95, z: -311, note: 'Bredd 15 m' });
+  corridor(boxes, 95, -368, -255, 8.5, 38, null, 'canyon');
+  zones.push({ type: 'Kanjon', x: 95, z: -311, note: `Bredd ${17 * S} m` });
   // Vägg med hål
-  windowWall(boxes, 95, -200, 70, 40, 13, 4.5);
-  zones.push({ type: 'Vägg', x: 95, z: -200, note: 'Hål på 13 m höjd' });
+  windowWall(boxes, 95, -200, 70, 40, 13, 6);
+  zones.push({ type: 'Vägg', x: 95, z: -200, note: `Hål ${7 * S}–${19 * S} m upp` });
   // Tunnel med tak
-  corridor(boxes, 95, -170, -110, 6, 22, 20, 'tunnel');
-  zones.push({ type: 'Tunnel', x: 95, z: -140, note: 'Tak på 20 m' });
+  corridor(boxes, 95, -170, -110, 7, 22, 20, 'tunnel');
+  zones.push({ type: 'Tunnel', x: 95, z: -140, note: `Tak på ${20 * S} m` });
 
   const bounds = { minX: -70, maxX: 160, minZ: -470, maxZ: 30 };
   const trees = [];
@@ -134,11 +154,11 @@ function buildDemo() {
     const x = forest.minX + rand() * (forest.maxX - forest.minX);
     const z = forest.minZ + rand() * (forest.maxZ - forest.minZ);
     const baseR = 1.8 + rand() * 1.4;
-    if (distToPath(path, x, z) < 4.6 + baseR) continue;
-    if (nearGate(x, z, 8 + baseR)) continue;
+    if (distToPath(path, x, z) < 6.2 + baseR) continue;
+    if (nearGate(x, z, 11 + baseR)) continue;
     if (trees.some((t) => (t.x - x) ** 2 + (t.z - z) ** 2 < (t.baseR + baseR) ** 2 * 0.8)) continue;
     const h = 16 + rand() * 12;
-    trees.push({ x, z, baseR, h, trunkH: 3 + rand() * 2 });
+    trees.push({ x, z, baseR, h, trunkH: 3 + rand() * 2, trunkR: 0.45 });
   }
   // Glesare träd i resten av världen
   tries = 0;
@@ -152,7 +172,7 @@ function buildDemo() {
     if (blockedByBox(x, z, 3 + baseR)) continue;
     if (trees.some((t) => (t.x - x) ** 2 + (t.z - z) ** 2 < (t.baseR + baseR) ** 2)) continue;
     const h = 8 + rand() * 14;
-    trees.push({ x, z, baseR, h, trunkH: 2 + rand() * 2 });
+    trees.push({ x, z, baseR, h, trunkH: 2 + rand() * 2, trunkR: 0.45 });
   }
   // Klippelare runt de skarpa svängarna (port 7–9)
   tries = 0;
@@ -185,7 +205,7 @@ function buildDemo() {
   // Ta bort träd som hamnat i klippor
   const keptTrees = trees.filter((t) => !rocks.some((o) => (o.x - t.x) ** 2 + (o.z - t.z) ** 2 < (o.r + t.baseR) ** 2));
 
-  return {
+  return scaleLevel({
     id: 'demo',
     name: LEVEL_INFO.demo.name,
     start: { x: start[0], y: start[1], z: start[2], yaw: yawFromDir(G[0][0] - start[0], G[0][2] - start[2]) },
@@ -199,7 +219,7 @@ function buildDemo() {
     ceiling: 50,
     fog: { color: 0x141c2b, near: 16, far: 78 },
     penalties: { crash: 3, miss: 5 },
-  };
+  }, S);
 }
 
 const builders = { demo: buildDemo };

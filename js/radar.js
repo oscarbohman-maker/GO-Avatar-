@@ -1,7 +1,7 @@
 // Navigatörens radar: ovanifrån-karta över kommande hinder och portar,
 // höjdmätare och möjlighet att rita ut en egen rutt.
 
-const ZOOMS = [45, 80, 140, 240];
+const ZOOMS = [90, 160, 280, 480];
 const COLORS = {
   bg: '#0b1712',
   grid: 'rgba(120,200,160,0.07)',
@@ -167,7 +167,7 @@ export class RadarView {
   // ---- rita --------------------------------------------------------------
   draw() {
     const ctx = this.ctx, L = this.level;
-    if (this.beforeDraw && this.mode === 'overview') this.beforeDraw();
+    if (this.beforeDraw) this.beforeDraw();
     const f = this._frame();
     this._f = f;
     ctx.setTransform(this.dpr, 0, 0, this.dpr, 0, 0);
@@ -283,15 +283,19 @@ export class RadarView {
       const v = this.view;
       const fx = -Math.sin(v.yaw), fz = -Math.cos(v.yaw);
       const rx = -fz, rz = fx;
-      const S = Math.max(7 * px, 2.2);
       ctx.fillStyle = this.state && this.state.ph === 'crashed' ? '#ff4d4d' : COLORS.plane;
-      ctx.beginPath();
-      ctx.moveTo(v.x + fx * S * 1.4, v.z + fz * S * 1.4);
-      ctx.lineTo(v.x - fx * S + rx * S, v.z - fz * S + rz * S);
-      ctx.lineTo(v.x - fx * S * 0.5, v.z - fz * S * 0.5);
-      ctx.lineTo(v.x - fx * S - rx * S, v.z - fz * S - rz * S);
-      ctx.closePath();
-      ctx.fill();
+      // (höger, fram) i planets system -> världen
+      const P = (r, fw) => [v.x + rx * r + fx * fw, v.z + rz * r + fz * fw];
+      const poly = (pts) => { ctx.beginPath(); pts.forEach((p, i) => { const q = P(p[0], p[1]); i ? ctx.lineTo(q[0], q[1]) : ctx.moveTo(q[0], q[1]); }); ctx.closePath(); ctx.fill(); };
+      if (6.6 * f.k > 9) {
+        // planets riktiga form i skala (13 m vingbredd) så navigatören ser marginalerna
+        poly([[0, 6.1], [0.75, 4.6], [1, 2], [1, -3.5], [0.5, -6.2], [-0.5, -6.2], [-1, -3.5], [-1, 2], [-0.75, 4.6]]);
+        poly([[0.9, 1.6], [6.6, 0.85], [6.6, 0.05], [0.9, -0.6], [-0.9, -0.6], [-6.6, 0.05], [-6.6, 0.85], [-0.9, 1.6]]);
+        poly([[0.4, -4.95], [2.3, -5.75], [2.3, -6.25], [-2.3, -6.25], [-2.3, -5.75], [-0.4, -4.95]]);
+      } else {
+        const S = 7 * px;
+        poly([[0, S * 1.4], [S, -S], [0, -S * 0.5], [-S, -S]]);
+      }
     }
     ctx.restore();
 
@@ -312,7 +316,7 @@ export class RadarView {
       ctx.fill();
       ctx.fillStyle = i === ng ? '#000' : COLORS.text;
       ctx.fillText(label, x, y - 17);
-      if (f.k > 2.2 || i === ng) {
+      if (f.k > 1.1 || i === ng) {
         ctx.font = '500 10px -apple-system, system-ui, sans-serif';
         ctx.fillStyle = 'rgba(232,245,238,0.85)';
         ctx.fillText(Math.round(g.y) + ' m', x, y + 14);
@@ -361,7 +365,7 @@ export class RadarView {
     if (!s) return;
     const L = this.level;
     const W = 44, H = Math.min(260, this.h - 120);
-    const x0 = this.w - W - 12, y0 = (this.h - H) / 2;
+    const x0 = 10, y0 = Math.max(this.opts.altTop || 0, (this.h - H) / 2);
     const maxA = L.ceiling;
     const yOf = (a) => y0 + H - (Math.max(0, Math.min(maxA, a)) / maxA) * H;
     ctx.fillStyle = 'rgba(0,0,0,0.55)';
@@ -372,7 +376,7 @@ export class RadarView {
     ctx.font = '500 9px -apple-system, system-ui, sans-serif';
     ctx.fillStyle = 'rgba(255,255,255,0.55)';
     ctx.textAlign = 'right';
-    for (let a = 0; a <= maxA; a += 10) {
+    for (let a = 0; a <= maxA; a += 20) {
       ctx.fillText(String(a), x0 + W / 2 - 6, yOf(a));
     }
     ctx.textAlign = 'center';
