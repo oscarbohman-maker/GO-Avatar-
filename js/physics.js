@@ -157,22 +157,22 @@ export function gateLocal(g, x, y, z) {
 // Kollisionspunkter på planet (lokalt: x höger, y upp, -z fram).
 // Portarnas ringar och stjärnorna kan man alltid flyga igenom – de krockar man aldrig med.
 export const PROBES = [
-  { name: 'kropp', p: [0, 0, 0], r: PLANE_R },
-  { name: 'nos', p: [0, 0, -5.4], r: 0.9 },
-  { name: 'stjärt', p: [0, 0.9, 5.6], r: 0.8 },
-  { name: 'vänster vinge', p: [-6.4, -0.05, -0.3], r: 0.5 },
-  { name: 'höger vinge', p: [6.4, -0.05, -0.3], r: 0.5 },
+  { name: 'body', p: [0, 0, 0], r: PLANE_R },
+  { name: 'nose', p: [0, 0, -5.4], r: 0.9 },
+  { name: 'tail', p: [0, 0.9, 5.6], r: 0.8 },
+  { name: 'left wing', p: [-6.4, -0.05, -0.3], r: 0.5 },
+  { name: 'right wing', p: [6.4, -0.05, -0.3], r: 0.5 },
 ];
 
 function hitAt(level, x, y, z, r) {
-  if (y < GROUND_Y * (r / PLANE_R)) return 'marken';
+  if (y < GROUND_Y * (r / PLANE_R)) return 'the ground';
   const grid = level._grid;
   const cands = grid ? grid.query(x, z) : null;
   const trees = cands ? cands.trees : level.trees;
   const rocks = cands ? cands.rocks : level.rocks;
-  for (const t of trees) if (hitTree(t, x, y, z, r)) return 'ett träd';
-  for (const o of rocks) if (hitRock(o, x, y, z, r)) return 'en klippa';
-  for (const b of level.boxes) if (hitBox(b, x, y, z, r)) return b.kind === 'roof' ? 'tunneltaket' : b.kind === 'canyon' ? 'kanjonväggen' : b.kind === 'treewall' ? 'ett träd' : 'en vägg';
+  for (const t of trees) if (hitTree(t, x, y, z, r)) return 'a tree';
+  for (const o of rocks) if (hitRock(o, x, y, z, r)) return 'a rock';
+  for (const b of level.boxes) if (hitBox(b, x, y, z, r)) return b.kind === 'roof' ? 'the tunnel roof' : b.kind === 'canyon' ? 'the canyon wall' : b.kind === 'treewall' ? 'a tree' : 'a wall';
   return null;
 }
 
@@ -181,7 +181,7 @@ export function checkCollision(level, x, y, z, r = PLANE_R) {
   const hit = hitAt(level, x, y, z, r);
   if (hit) return hit;
   const B = level.bounds, m = 140;
-  if (x < B.minX - m || x > B.maxX + m || z < B.minZ - m || z > B.maxZ + m) return 'utanför banan';
+  if (x < B.minX - m || x > B.maxX + m || z < B.minZ - m || z > B.maxZ + m) return 'out of bounds';
   return null;
 }
 
@@ -191,10 +191,10 @@ export function checkPlaneCollision(level, s) {
     const w = rotYXZ(pr.p[0], pr.p[1], pr.p[2], s.yaw, s.pitch, s.roll);
     const x = s.x + w[0], y = s.y + w[1], z = s.z + w[2];
     const hit = hitAt(level, x, y, z, pr.r);
-    if (hit) return pr.name === 'kropp' || pr.name === 'nos' ? hit : hit + ' (' + pr.name + ')';
+    if (hit) return pr.name === 'body' || pr.name === 'nose' ? hit : hit + ' (' + pr.name + ')';
   }
   const B = level.bounds, m = 140;
-  if (s.x < B.minX - m || s.x > B.maxX + m || s.z < B.minZ - m || s.z > B.maxZ + m) return 'utanför banan';
+  if (s.x < B.minX - m || s.x > B.maxX + m || s.z < B.minZ - m || s.z > B.maxZ + m) return 'out of bounds';
   return null;
 }
 

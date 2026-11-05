@@ -34,13 +34,13 @@ function peerOptions() {
 }
 
 const ERRORS = {
-  'peer-unavailable': 'Hittade inget spel med den koden. Kontrollera koden och att din vän har lobbyn öppen.',
-  'network': 'Kunde inte nå anslutningsservern. Kontrollera internetanslutningen.',
-  'server-error': 'Anslutningsservern svarade inte. Försök igen om en stund.',
-  'socket-error': 'Anslutningen till servern bröts. Försök igen.',
-  'socket-closed': 'Anslutningen till servern stängdes. Försök igen.',
-  'browser-incompatible': 'Din webbläsare stöder inte WebRTC. Uppdatera Safari eller prova en annan webbläsare.',
-  'webrtc': 'Kunde inte skapa en direktanslutning mellan er (WebRTC).',
+  'peer-unavailable': 'No game found with that code. Check the code and that your friend has the lobby open.',
+  'network': 'Could not reach the connection server. Check your internet connection.',
+  'server-error': 'The connection server did not respond. Try again in a moment.',
+  'socket-error': 'The connection to the server was lost. Try again.',
+  'socket-closed': 'The connection to the server was closed. Try again.',
+  'browser-incompatible': 'Your browser does not support WebRTC. Update Safari or try another browser.',
+  'webrtc': 'Could not create a direct connection between you (WebRTC).',
 };
 
 export class Net {
@@ -62,7 +62,7 @@ export class Net {
   get remoteId() { return this.conn ? this.conn.peer : null; }
 
   _createPeer(id) {
-    if (typeof Peer === 'undefined') throw new Error('PeerJS kunde inte laddas.');
+    if (typeof Peer === 'undefined') throw new Error('PeerJS could not be loaded.');
     return id ? new Peer(id, peerOptions()) : new Peer(peerOptions());
   }
 
@@ -104,7 +104,7 @@ export class Net {
       this._bind(conn);
       // Om anslutningen inte öppnas inom rimlig tid
       setTimeout(() => {
-        if (!this.closed && !this._errored && !(this.conn && this.conn.open)) this.emit('error', 'Det tog för lång tid att ansluta. Kontrollera koden och försök igen.');
+        if (!this.closed && !this._errored && !(this.conn && this.conn.open)) this.emit('error', 'Connecting took too long. Check the code and try again.');
       }, 15000);
     });
     peer.on('error', (err) => this._error(err));
@@ -113,7 +113,7 @@ export class Net {
   _error(err) {
     console.warn('Peer error', err && err.type, err);
     this._errored = true;
-    this.emit('error', ERRORS[err && err.type] || ('Anslutningsfel: ' + ((err && err.message) || err)));
+    this.emit('error', ERRORS[err && err.type] || ('Connection error: ' + ((err && err.message) || err)));
   }
 
   _bind(conn) {

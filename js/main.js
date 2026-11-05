@@ -10,8 +10,8 @@ const $ = (s, r = document) => r.querySelector(s);
 const $$ = (s, r = document) => Array.from(r.querySelectorAll(s));
 
 const ROLE = {
-  pilot: { name: 'Pilot', icon: '✈️', desc: 'Flyger planet' },
-  navigator: { name: 'Navigatör', icon: '🧭', desc: 'Ser radarn och guidar' },
+  pilot: { name: 'Pilot', icon: '✈️', desc: 'Flies the plane' },
+  navigator: { name: 'Navigator', icon: '🧭', desc: 'Watches the radar and guides' },
 };
 const other = (r) => (r === 'pilot' ? 'navigator' : 'pilot');
 
@@ -63,12 +63,12 @@ function renderRecords() {
   const el = $('#records');
   const best = Object.entries(p.best);
   if (!best.length && !p.history.length) { el.innerHTML = ''; return; }
-  let html = '<h4>Dina rekord (sparas på den här enheten)</h4><ul>';
+  let html = '<h4>Your records (saved on this device)</h4><ul>';
   for (const [lvl, b] of best) {
     const name = (LEVEL_INFO[lvl] && LEVEL_INFO[lvl].name) || lvl;
-    html += `<li>${esc(name)}: <b>${b.time.toFixed(1)} s</b> (${b.crashes} krascher${b.partner ? ', med ' + esc(b.partner) : ''})</li>`;
+    html += `<li>${esc(name)}: <b>${b.time.toFixed(1)} s</b> (${b.crashes} crashes${b.partner ? ', with ' + esc(b.partner) : ''})</li>`;
   }
-  html += `</ul><small>Totalt ${p.history.length} flygningar.</small>`;
+  html += `</ul><small>${p.history.length} flights in total.</small>`;
   el.innerHTML = html;
 }
 
@@ -77,7 +77,7 @@ function esc(s) {
 }
 
 function myName() {
-  return Store.profile.name || 'Spelare';
+  return Store.profile.name || 'Player';
 }
 
 function initHome() {
@@ -96,7 +96,7 @@ function initHome() {
   $('#btn-join').onclick = () => {
     unlockAudio();
     const code = normalizeCode(codeIn.value);
-    if (code.length !== 4) { setStatus($('#home-status'), 'Koden ska vara 4 tecken.', 'error'); return; }
+    if (code.length !== 4) { setStatus($('#home-status'), 'The code must be 4 characters.', 'error'); return; }
     joinGame(code);
   };
   $('#btn-solo').onclick = () => { unlockAudio(); startSolo(false); };
@@ -127,7 +127,7 @@ function cleanupNet() {
   if (app.voice) { app.voice.destroy(); app.voice = null; }
   if (app.net) { app.net.close(); app.net = null; }
   app.friendName = null;
-  $$('.voice-btn').forEach((b) => { b.classList.add('hidden'); b.classList.remove('on', 'muted'); b.textContent = '🎤 Röst av'; });
+  $$('.voice-btn').forEach((b) => { b.classList.add('hidden'); b.classList.remove('on', 'muted'); b.textContent = '🎤 Voice off'; });
   $('#btn-audio-tap').classList.add('hidden');
 }
 
@@ -161,7 +161,7 @@ function wireNet(net) {
 // Vännen lämnade eller tappade anslutningen
 function friendLost(net, left) {
   if (app.net !== net) return;
-  const who = app.friendName || 'Din vän';
+  const who = app.friendName || 'Your friend';
   if (app.isHost) {
     // Värden stannar kvar i lobbyn – en vän kan gå med igen med samma kod
     if (!app.friendName && !app.inGame) return; // redan hanterat
@@ -173,11 +173,11 @@ function friendLost(net, left) {
     app.friendName = null;
     renderLobby();
     show('screen-lobby');
-    setStatus($('#lobby-status'), (left ? who + ' lämnade spelet.' : 'Anslutningen till ' + who + ' bröts.') + ' Samma kod gäller – din vän kan gå med igen.', 'error');
+    setStatus($('#lobby-status'), (left ? who + ' left the game.' : 'The connection to ' + who + ' was lost.') + ' The same code still works – your friend can join again.', 'error');
   } else {
     goHome();
-    message(left ? 'Värden lämnade' : 'Anslutningen bröts',
-      left ? who + ' avslutade spelet.' : 'Kontakten med ' + who + ' tappades. Gå med igen med koden om spelet fortfarande är öppet.');
+    message(left ? 'The host left' : 'Connection lost',
+      left ? who + ' ended the game.' : 'Lost contact with ' + who + '. Join again with the code if the game is still open.');
   }
 }
 
@@ -190,10 +190,10 @@ function hostGame() {
   wireNet(app.net);
   app.net.on('code', (code) => {
     $('#lobby-code').textContent = code;
-    setStatus($('#lobby-status'), 'Ge koden till din vän, eller tryck "Dela länk".');
+    setStatus($('#lobby-status'), 'Give the code to your friend, or tap "Share link".');
   });
   $('#lobby-code').textContent = '····';
-  setStatus($('#lobby-status'), 'Skapar spel...');
+  setStatus($('#lobby-status'), 'Creating game...');
   renderLobby();
   show('screen-lobby');
   try { app.net.host(); } catch (e) { setStatus($('#lobby-status'), e.message, 'error'); }
@@ -204,7 +204,7 @@ function joinGame(code) {
   app.isHost = false;
   app.solo = false;
   document.body.classList.remove('is-host');
-  setStatus($('#home-status'), 'Ansluter till ' + code + '...');
+  setStatus($('#home-status'), 'Connecting to ' + code + '...');
   app.net = new Net();
   wireNet(app.net);
   try { app.net.join(code); } catch (e) { goHome(e.message, 'error'); }
@@ -215,18 +215,18 @@ function onMessage(m) {
     // ---- lobby
     case 'hello':
       if (!app.isHost) return;
-      app.friendName = String(m.name || 'Vän').slice(0, 16);
-      if (m.ver !== PROTOCOL_VERSION) setStatus($('#lobby-status'), 'Varning: din vän har en annan version av spelet. Ladda om sidan.', 'error');
-      else setStatus($('#lobby-status'), app.friendName + ' är med!', 'ok');
+      app.friendName = String(m.name || 'Friend').slice(0, 16);
+      if (m.ver !== PROTOCOL_VERSION) setStatus($('#lobby-status'), 'Warning: your friend has a different version of the game. Reload the page.', 'error');
+      else setStatus($('#lobby-status'), app.friendName + ' joined!', 'ok');
       app.net.send({ t: 'welcome', name: myName(), hostRole: app.hostRole, level: app.levelId, ver: PROTOCOL_VERSION });
       renderLobby();
       break;
     case 'welcome':
-      app.friendName = String(m.name || 'Vän').slice(0, 16);
+      app.friendName = String(m.name || 'Friend').slice(0, 16);
       app.hostRole = m.hostRole === 'navigator' ? 'navigator' : 'pilot';
       app.levelId = LEVEL_INFO[m.level] ? m.level : 'demo';
       $('#lobby-code').textContent = app.net.code;
-      setStatus($('#lobby-status'), m.ver !== PROTOCOL_VERSION ? 'Varning: olika versioner av spelet. Ladda om sidan.' : 'Ansluten till ' + app.friendName + '!', m.ver !== PROTOCOL_VERSION ? 'error' : 'ok');
+      setStatus($('#lobby-status'), m.ver !== PROTOCOL_VERSION ? 'Warning: different game versions. Reload the page.' : 'Connected to ' + app.friendName + '!', m.ver !== PROTOCOL_VERSION ? 'error' : 'ok');
       renderLobby();
       show('screen-lobby');
       break;
@@ -234,7 +234,7 @@ function onMessage(m) {
       friendLost(app.net, true);
       break;
     case 'full':
-      goHome('Spelet är redan fullt (två spelare).', 'error');
+      goHome('The game is already full (two players).', 'error');
       break;
     case 'roles':
       app.hostRole = m.hostRole === 'navigator' ? 'navigator' : 'pilot';
@@ -288,13 +288,13 @@ function setupVoice() {
     btns.forEach((btn) => {
       btn.classList.toggle('on', state === 'on');
       btn.classList.toggle('muted', state === 'muted');
-      btn.textContent = state === 'on' ? '🎤 Röst på' : state === 'muted' ? '🔇 Tystad' : '🎤 Röst av';
+      btn.textContent = state === 'on' ? '🎤 Voice on' : state === 'muted' ? '🔇 Muted' : '🎤 Voice off';
     });
     tap.classList.toggle('hidden', !(app.voice && app.voice.needsTap));
   });
   btns.forEach((btn) => {
     btn.classList.remove('hidden');
-    btn.textContent = '🎤 Röst av';
+    btn.textContent = '🎤 Voice off';
     btn.onclick = async () => {
       const v = app.voice;
       if (!v) return;
@@ -302,7 +302,7 @@ function setupVoice() {
         try { await v.enable(); }
         catch (e) {
           const denied = e && (e.name === 'NotAllowedError' || e.name === 'SecurityError');
-          message('Mikrofonen kunde inte startas', denied ? 'Tillåt mikrofonen för sidan i Safari och försök igen. Ni kan också ringa varandra istället.' : ((e && e.message) || 'Okänt fel.'));
+          message('Could not start the microphone', denied ? 'Allow the microphone for this page in Safari and try again. You can also call each other instead.' : ((e && e.message) || 'Unknown error.'));
         }
       } else v.toggleMute();
     };
@@ -317,8 +317,8 @@ function renderLobby() {
     const el = $(slot);
     el.classList.toggle('empty', !!empty);
     $('.role-icon', el).textContent = empty ? '⏳' : ROLE[role].icon;
-    $('.pname', el).textContent = empty ? 'Väntar på vän...' : name;
-    $('.prole', el).textContent = empty ? 'Dela koden ovan' : ROLE[role].name + ' – ' + ROLE[role].desc;
+    $('.pname', el).textContent = empty ? 'Waiting for a friend...' : name;
+    $('.prole', el).textContent = empty ? 'Share the code above' : ROLE[role].name + ' – ' + ROLE[role].desc;
   };
   fill('#slot-me', myName() + ' (du)', mine, false);
   fill('#slot-friend', app.friendName, other(mine), !app.friendName);
@@ -331,7 +331,7 @@ function renderLobby() {
     const selected = w.available && lvl === app.levelId;
     el.className = 'world' + (w.available ? '' : ' locked') + (selected ? ' selected' : '');
     const best = lvl && Store.profile.best[lvl];
-    el.innerHTML = `<div><b>${esc(w.name)}</b><small>${w.available ? esc(LEVEL_INFO[lvl].name) + (best ? ' · rekord ' + best.time.toFixed(1) + ' s' : '') : 'Kommer snart'}</small></div><span class="diff">${esc(w.difficulty)}</span>`;
+    el.innerHTML = `<div><b>${esc(w.name)}</b><small>${w.available ? esc(LEVEL_INFO[lvl].name) + (best ? ' · record ' + best.time.toFixed(1) + ' s' : '') : 'Coming soon'}</small></div><span class="diff">${esc(w.difficulty)}</span>`;
     if (w.available && app.isHost) {
       el.style.cursor = 'pointer';
       el.onclick = () => { app.levelId = lvl; app.net && app.net.send({ t: 'level', level: lvl }); renderLobby(); };
@@ -360,15 +360,15 @@ function initLobby() {
     const q = new URLSearchParams(location.search);
     q.set('join', code);
     const url = location.origin + location.pathname + '?' + q.toString();
-    const text = `Flyg med mig i Blindflyg! Kod: ${code}`;
+    const text = `Fly with me in Blind Flight! Code: ${code}`;
     try {
-      if (navigator.share) { await navigator.share({ title: 'Blindflyg', text, url }); return; }
+      if (navigator.share) { await navigator.share({ title: 'Blind Flight', text, url }); return; }
     } catch (e) { if (e && e.name === 'AbortError') return; }
     try {
       await navigator.clipboard.writeText(url);
-      setStatus($('#lobby-status'), 'Länken är kopierad!', 'ok');
+      setStatus($('#lobby-status'), 'Link copied!', 'ok');
     } catch (_) {
-      window.prompt('Kopiera länken:', url);
+      window.prompt('Copy the link:', url);
     }
   };
 }
@@ -396,12 +396,12 @@ function handleEvent(e) {
   const g = app.game;
   if (!g) return;
   switch (e.kind) {
-    case 'go': flash('KÖR!', 'good big', 700); sfx.go(); break;
+    case 'go': flash('GO!', 'good big', 700); sfx.go(); break;
     case 'pass':
-      if (!e.finished) { flash(`Port ${e.gate + 1} ✓`, 'good', 800); sfx.gate(); }
+      if (!e.finished) { flash(`Gate ${e.gate + 1} ✓`, 'good', 800); sfx.gate(); }
       break;
-    case 'miss': flash(`Missad port ${e.gate + 1}! <small>+${g.level.penalties.miss} s</small>`, 'bad', 1300, true); sfx.miss(); break;
-    case 'crash': flash(`KRASCH! <small>in i ${esc(e.what)} · +${g.level.penalties.crash} s</small>`, 'bad', 1300, true); sfx.crash(); break;
+    case 'miss': flash(`Missed gate ${e.gate + 1}! <small>+${g.level.penalties.miss} s</small>`, 'bad', 1300, true); sfx.miss(); break;
+    case 'crash': flash(`CRASH! <small>into ${esc(e.what)} · +${g.level.penalties.crash} s</small>`, 'bad', 1300, true); sfx.crash(); break;
     case 'star':
       flash(`⭐ ${e.count}/${e.total} <small>−${STAR_BONUS} s</small>`, 'good', 700, true);
       sfx.star();
@@ -481,7 +481,7 @@ async function startGame() {
     };
     const showWait = () => {
       const w = $('.wait-msg', pilotUI);
-      w.textContent = 'Navigatören planerar rutten... Gör dig redo!';
+      w.textContent = 'The navigator is planning the route... Get ready!';
       w.classList.remove('hidden');
     };
     let minimap = null;
@@ -493,7 +493,7 @@ async function startGame() {
     const voiceBtn = $('#btn-npc-voice');
     voiceBtn.classList.toggle('hidden', !npc);
     if (voice) {
-      const syncVoice = () => { voiceBtn.textContent = voice.enabled ? '🔊 Röst' : '🔇 Röst'; };
+      const syncVoice = () => { voiceBtn.textContent = voice.enabled ? '🔊 Voice' : '🔇 Voice'; };
       syncVoice();
       voiceBtn.onclick = () => { voice.enabled = !voice.enabled; if (!voice.enabled) voice.stop(); syncVoice(); };
     }
@@ -545,7 +545,7 @@ async function startGame() {
     }
     pv.start();
     if (app.solo) g.begin(); else showWait();
-    if (npc) setSub('Hej! Jag ser banan åt dig. Lyssna på mig så flyger vi igenom portarna.');
+    if (npc) setSub("Hi! I can see the course for you. Listen to me and we'll fly through the gates.");
   } else {
     const { RadarView } = await import('./radar.js');
     if (!app.inGame) return;
@@ -564,13 +564,13 @@ async function startGame() {
       pip = new NavCockpit($('.view3d-holder', pipEl), level);
       pip.start();
     } catch (e) {
-      console.warn('3D-fönstret kunde inte startas', e);
+      console.warn('Could not start the 3D window', e);
       pipEl.classList.add('hidden');
     }
     const planBox = $('.plan-box', navUI);
     const toolBtn = (a) => $(`[data-act="${a}"]`, navUI);
     const syncTools = () => {
-      toolBtn('mode').textContent = rv.mode === 'north' ? 'Norr upp' : 'Nos upp';
+      toolBtn('mode').textContent = rv.mode === 'north' ? 'North up' : 'Nose up';
       toolBtn('overview').classList.toggle('on', rv.mode === 'overview');
     };
     let modeBeforeOverview = 'heading';
@@ -651,11 +651,11 @@ async function startGame() {
     });
     if (pip) {
       const pm = $('.pip-mode', pipEl);
-      pm.textContent = 'Utsida';
+      pm.textContent = 'Outside';
       pm.onclick = () => {
         const out = pip.view.mode !== 'outside';
         pip.setMode(out ? 'outside' : 'auto');
-        pm.textContent = out ? 'Cockpit' : 'Utsida';
+        pm.textContent = out ? 'Cockpit' : 'Outside';
       };
     }
     // Översiktskartan ska rymmas mellan panelerna
@@ -688,14 +688,14 @@ function updateGuide(root, rv) {
   if (!gd) return;
   const t = Math.round(gd.turn);
   const turnEl = $('.guide-turn', root), altEl = $('.guide-alt', root), distEl = $('.guide-dist', root);
-  const name = gd.gate.finish ? 'målet' : 'port ' + (gd.gate.idx + 1);
-  if (Math.abs(t) > 150) turnEl.textContent = '↩ Vänd om';
-  else if (t > 6) turnEl.textContent = `↱ Höger ${t}°`;
-  else if (t < -6) turnEl.textContent = `↰ Vänster ${-t}°`;
-  else turnEl.textContent = '↑ Rakt fram';
+  const name = gd.gate.finish ? 'the finish' : 'gate ' + (gd.gate.idx + 1);
+  if (Math.abs(t) > 150) turnEl.textContent = '↩ Turn around';
+  else if (t > 6) turnEl.textContent = `↱ Right ${t}°`;
+  else if (t < -6) turnEl.textContent = `↰ Left ${-t}°`;
+  else turnEl.textContent = '↑ Straight ahead';
   const dy = Math.round(gd.dy);
-  altEl.textContent = dy > 1 ? `Stig ${dy} m` : dy < -1 ? `Sjunk ${-dy} m` : 'Rätt höjd';
-  distEl.textContent = `${Math.round(gd.dist)} m till ${name}`;
+  altEl.textContent = dy > 1 ? `Climb ${dy} m` : dy < -1 ? `Descend ${-dy} m` : 'Altitude OK';
+  distEl.textContent = `${Math.round(gd.dist)} m to ${name}`;
 }
 
 function showResults(e) {
@@ -707,10 +707,10 @@ function showResults(e) {
     role, partner: app.npc ? 'NPC' : app.solo ? null : app.friendName, solo: app.solo,
   });
   const res = $('#results');
-  $('.res-title', res).textContent = 'I mål!';
+  $('.res-title', res).textContent = 'Finished!';
   $('.res-time', res).textContent = e.time.toFixed(1) + ' s';
-  $('.res-details', res).textContent = `⭐ ${e.stars || 0}/${e.totalStars || 0} stjärnor · ${e.crashes} krascher · ${e.misses} missade portar`;
-  $('.res-record', res).textContent = isRecord ? '🏆 Nytt rekord!' : '';
+  $('.res-details', res).textContent = `⭐ ${e.stars || 0}/${e.totalStars || 0} stars · ${e.crashes} crashes · ${e.misses} missed gates`;
+  $('.res-record', res).textContent = isRecord ? '🏆 New record!' : '';
   res.classList.remove('hidden');
 }
 

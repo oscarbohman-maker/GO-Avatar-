@@ -26,29 +26,23 @@ function groundTexture() {
 const GATE_COLORS = { next: 0xffd23f, upcoming: 0xff8c42, passed: 0x3ddc84, finish: 0xffffff };
 
 export class World3D {
-  // opts.dark: pilotens mörka nattvy med kort sikt
-  constructor(level, opts = {}) {
+  constructor(level) {
     this.level = level;
     const L = level;
-    const dark = !!opts.dark;
-    this.fog = dark ? L.pilotFog : L.fog;
     const scene = new THREE.Scene();
     this.scene = scene;
-    scene.background = new THREE.Color(this.fog.color);
-    scene.fog = new THREE.Fog(this.fog.color, this.fog.near, this.fog.far);
+    this.fogA = { color: new THREE.Color(L.fog.color), near: L.fog.near, far: L.fog.far };
+    const pf = L.pilotFog || L.fog;
+    this.fogB = { color: new THREE.Color(pf.color), near: pf.near, far: pf.far };
+    scene.background = this.fogA.color.clone();
+    scene.fog = new THREE.Fog(this.fogA.color.clone(), this.fogA.near, this.fogA.far);
+    this.maxFar = Math.max(this.fogA.far, this.fogB.far);
 
-    if (dark) {
-      // natt: svagt blått månljus
-      scene.add(new THREE.HemisphereLight(0x7f97c8, 0x0c140c, 0.45));
-      const moon = new THREE.DirectionalLight(0xa9c1ff, 0.45);
-      moon.position.set(-30, 80, 20);
-      scene.add(moon);
-    } else {
-      scene.add(new THREE.HemisphereLight(0xcfe3ff, 0x2d4a22, 1.7));
-      const sun = new THREE.DirectionalLight(0xfff2d6, 2.0);
-      sun.position.set(40, 80, 30);
-      scene.add(sun);
-    }
+    // dagsljus
+    scene.add(new THREE.HemisphereLight(0xdfeeff, 0x3a5a2c, 1.9));
+    const sun = new THREE.DirectionalLight(0xfff2d6, 2.1);
+    sun.position.set(40, 80, 30);
+    scene.add(sun);
 
     // mark
     const B = L.bounds;
@@ -164,6 +158,20 @@ export class World3D {
       mesh.material.transparent = i < ng;
       mesh.material.opacity = i < ng ? 0.35 : 1;
     });
+  }
+
+  // 0 = vanlig sikt (utifrån), 1 = pilotens täta dimma (i cockpiten)
+  setFogMix(k) {
+    k = Math.max(0, Math.min(1, k));
+    if (this._fogK === k) return;
+    this._fogK = k;
+    const f = this.scene.fog, A = this.fogA, B = this.fogB;
+    f.color.copy(A.color).lerp(B.color, k);
+    this.scene.background.copy(f.color);
+    // avståndet minskar snabbt i början så att dimman "sluter sig" när man kliver in
+    const e = 1 - Math.pow(1 - k, 2);
+    f.near = A.near + (B.near - A.near) * e;
+    f.far = A.far + (B.far - A.far) * e;
   }
 
   setStarCollected(idx, collected = true) {

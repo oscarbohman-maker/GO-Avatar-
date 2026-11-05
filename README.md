@@ -2,7 +2,9 @@
 
 Ett samarbetsspel för två i webbläsaren (byggt för Safari på iPhone, iPad och Mac, men funkar i alla moderna webbläsare).
 
-- **Piloten** sitter i vänster stol i cockpiten och flyger planet i förstaperson, på natten med bara cirka 60 m sikt. Det enda ljuset är en svag kabinlampa, lysande instrument och en strålkastare i nosen. Navigatörens cockpitfönster är ljust.
+- **Piloten** sitter i vänster stol i cockpiten. Före start är det ljust dagsljus, men så fort kameran går in i cockpiten tätnar en stark, ljusgrå dimma till cirka 60 m sikt. Kameran sitter bakom och mellan stolarna, så man ser både sig själv och kompisen utan att vrida sig. Navigatörens cockpitfönster ser genom dimman.
+
+Spelet är på engelska, och NPC-navigatören pratar engelska.
 - **Navigatören** sitter i höger stol, ser en radar med alla hinder och portar och guidar piloten med rösten och med gester.
 
 Båda ser sina egna armar, ben och kropp och kompisens kropp i cockpiten. Pilotens händer följer ratten och gasreglagen. Kompisen pekar när navigatören ger en gest och trycker på knappar i taket när navigatören ritar ut rutten.

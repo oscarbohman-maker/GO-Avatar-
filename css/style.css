@@ -106,7 +106,7 @@ body.is-host .guest-only { display: none; }
 .view3d-holder, .view3d { position: absolute; inset: 0; width: 100%; height: 100%; display: block; }
 .vignette {
   position: absolute; inset: 0; pointer-events: none;
-  background: radial-gradient(ellipse at 50% 45%, rgba(0,0,0,0.1) 25%, rgba(0,0,0,0.6) 70%, rgba(0,0,0,0.92) 100%);
+  background: radial-gradient(ellipse at 50% 50%, transparent 55%, rgba(0,0,0,0.25) 85%, rgba(0,0,0,0.45) 100%);
 }
 .crosshair { position: absolute; left: 50%; top: 50%; width: 22px; height: 22px; margin: -11px; pointer-events: none; opacity: 0.5; }
 .crosshair::before, .crosshair::after { content: ""; position: absolute; background: #fff; }

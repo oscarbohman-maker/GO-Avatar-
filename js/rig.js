@@ -33,15 +33,11 @@ export class PlaneRig {
     this.copilot = new Avatar(0.6, AVATAR_STYLES.copilot, 'andrepilot');
     this.cockpit.add(this.pilot.group, this.copilot.group);
 
-    // Ljus: svag varm kabinlampa (så att man ser händerna) och en strålkastare i nosen
+    // Svag varm kabinlampa. Kameran sitter bakom stolarna, så båda figurerna
+    // (även ens egen) syns hela tiden.
     const cabin = new THREE.PointLight(0xffd6a0, 2.2, 3.2, 2);
     cabin.position.set(0, 1.85, -0.15);
     this.cockpit.add(cabin);
-    const beam = new THREE.SpotLight(0xfff1d0, 260, 130, 0.3, 0.7, 1.4);
-    beam.position.set(0, -0.6, -6.3);
-    beam.target.position.set(0, -4, -60);
-    this.root.add(beam, beam.target);
-    (localSeat === 'pilot' ? this.pilot : this.copilot).setHeadVisible(false);
 
     this._setupInstruments();
     this.gest = null;      // pågående gest från navigatören
@@ -251,14 +247,21 @@ export class PlaneRig {
     });
   }
 
-  // Ögats position och riktning i världen för given plats
-  eyePose(seat, outPos, outQuat) {
-    const av = seat === 'copilot' ? this.copilot : this.pilot;
+  // Cockpitkamerans position och riktning i världen. Kameran sitter bakom och
+  // mellan stolarna (lite utzoomad) så att man ser både sig själv och kompisen
+  // utan att vrida sig. look = { yaw, pitch } för att titta runt (Q/E eller dra).
+  eyePose(seat, outPos, outQuat, look) {
     this.root.updateMatrixWorld(true);
-    outPos.copy(av.eye);
+    const side = seat === 'copilot' ? 1 : -1;
+    // en liten, väl dämpad rörelse från den egna figurens överkropp (stabil kamera)
+    const t = (seat === 'copilot' ? this.copilot : this.pilot).torsoSpring.p;
+    outPos.set(side * 0.12 + t.x * 0.3, 1.84 + t.y * 0.3, 1.28 + t.z * 0.3);
     this.cockpit.localToWorld(outPos);
     this.cockpit.getWorldQuaternion(outQuat);
-    outQuat.multiply(av.headQuat);
+    const ly = look ? look.yaw : 0, lp = look ? look.pitch : 0;
+    this._eyeQ = this._eyeQ || new THREE.Quaternion();
+    this._eyeQ.setFromEuler(new THREE.Euler(-0.15 + lp, ly, 0, 'YXZ'));
+    outQuat.multiply(this._eyeQ);
   }
 
   dispose() {

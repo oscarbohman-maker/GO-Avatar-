@@ -23,7 +23,7 @@ export class Voice {
   async enable() {
     if (this.localStream) return;
     if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
-      throw new Error('Mikrofon stöds inte här. Röstchatt kräver https och en modern webbläsare.');
+      throw new Error('Microphone is not supported here. Voice chat requires https and a modern browser.');
     }
     this.localStream = await navigator.mediaDevices.getUserMedia({
       audio: { echoCancellation: true, noiseSuppression: true, autoGainControl: true },

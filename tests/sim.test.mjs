@@ -105,7 +105,7 @@ test('testvärlden är en kanjon: väggar på båda sidor och alla portar på sa
       const side = [n[2] * sgn, 0, -n[0] * sgn];
       let hit = null;
       for (let d = 0; d <= 30 && !hit; d += 0.5) hit = checkCollision(test1, g.x + side[0] * d, g.y, g.z + side[2] * d, 0.5);
-      assert.ok(hit === 'ett träd' || hit === 'en klippa', `port ${g.idx + 1}: ingen trädvägg åt sidan (${hit})`);
+      assert.ok(hit === 'a tree' || hit === 'a rock', `port ${g.idx + 1}: ingen trädvägg åt sidan (${hit})`);
     }
   }
 });

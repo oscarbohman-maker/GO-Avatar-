@@ -61,7 +61,7 @@ export class NpcNavigator {
       const k = d / Math.max(maxDist, 1);
       const y = y0 + (y1 - y0) * k;
       const hit = checkCollision(this.level, p.x + fx * d, y, p.z + fz * d, 7.5);
-      if (hit && hit !== 'utanför banan') return false;
+      if (hit && hit !== 'out of bounds') return false;
     }
     return true;
   }
@@ -125,16 +125,16 @@ export class NpcNavigator {
   }
 
   _phrase(level, side, climb, brake) {
-    const dir = side === 'left' ? 'vänster' : 'höger';
+    const dir = side === 'left' ? 'left' : 'right';
     let s;
-    if (level === 'sharp') s = `Skarpt ${dir}!`;
-    else if (level === 'normal') s = `Sväng ${dir}`;
-    else if (level === 'slight') s = `Lite ${dir}`;
-    else s = climb === 'hold' ? 'Rakt fram, bra!' : 'Rakt fram';
-    if (climb === 'up') s += level === 'none' ? ', stig' : ' och stig';
-    if (climb === 'down') s += level === 'none' ? ', sjunk' : ' och sjunk';
-    if (brake) s = 'Bromsa! ' + s;
-    if (this.blocked) s = 'Hinder framför! ' + s;
+    if (level === 'sharp') s = `Hard ${dir}!`;
+    else if (level === 'normal') s = `Turn ${dir}`;
+    else if (level === 'slight') s = `A little ${dir}`;
+    else s = climb === 'hold' ? 'Straight ahead, good!' : 'Straight ahead';
+    if (climb === 'up') s += level === 'none' ? ', climb' : ' and climb';
+    if (climb === 'down') s += level === 'none' ? ', descend' : ' and descend';
+    if (brake) s = 'Brake! ' + s;
+    if (this.blocked) s = 'Obstacle ahead! ' + s;
     return s;
   }
 
@@ -149,18 +149,18 @@ export class NpcNavigator {
   // Kommentarer på händelser
   onEvent(e, level) {
     switch (e.kind) {
-      case 'go': return 'Nu kör vi! Jag säger hur du ska flyga.';
-      case 'pass': return e.finished ? null : (e.gate % 2 === 0 ? `Bra! Port ${e.gate + 1}.` : null);
-      case 'star': return Math.random() < 0.5 ? 'Snyggt, en stjärna!' : null;
-      case 'miss': return 'Vi missade porten. Vidare till nästa!';
-      case 'crash': return 'Aj! Vi tar det från förra porten.';
-      case 'finish': return `Mål! ${e.stars || 0} av ${e.totalStars || (level && level.stars ? level.stars.length : 0)} stjärnor. Bra flugit!`;
+      case 'go': return "Here we go! I'll tell you how to fly.";
+      case 'pass': return e.finished ? null : (e.gate % 2 === 0 ? `Nice! Gate ${e.gate + 1}.` : null);
+      case 'star': return Math.random() < 0.5 ? 'Nice, a star!' : null;
+      case 'miss': return 'We missed the gate. On to the next one!';
+      case 'crash': return "Ouch! We'll go again from the last gate.";
+      case 'finish': return `Finish! ${e.stars || 0} of ${e.totalStars || (level && level.stars ? level.stars.length : 0)} stars. Great flying!`;
       default: return null;
     }
   }
 }
 
-// Tal (text-till-tal) på svenska om webbläsaren kan
+// Tal (text-till-tal) på engelska
 export class NpcVoice {
   constructor() {
     this.enabled = true;
@@ -169,7 +169,7 @@ export class NpcVoice {
     const pick = () => {
       if (!this.synth) return;
       const vs = this.synth.getVoices() || [];
-      this.voice = vs.find((v) => /^sv/i.test(v.lang)) || null;
+      this.voice = vs.find((v) => /^en-(US|GB)/i.test(v.lang)) || vs.find((v) => /^en/i.test(v.lang)) || null;
     };
     pick();
     if (this.synth && 'onvoiceschanged' in this.synth) this.synth.onvoiceschanged = pick;
@@ -186,9 +186,9 @@ export class NpcVoice {
     try {
       this.synth.cancel();   // nya order är viktigare än gamla
       const u = new SpeechSynthesisUtterance(text);
-      u.lang = 'sv-SE';
+      u.lang = 'en-US';
       if (this.voice) u.voice = this.voice;
-      u.rate = 1.15;
+      u.rate = 1.1;
       u.pitch = 1.05;
       this.synth.speak(u);
     } catch (_) {}

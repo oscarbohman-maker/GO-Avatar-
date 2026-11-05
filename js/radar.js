@@ -324,7 +324,7 @@ export class RadarView {
       if (i < ng - 1) return;
       const [x, y] = this.toScreen(g.x, g.z, f);
       if (x < -20 || y < -20 || x > this.w + 20 || y > this.h + 20) return;
-      const label = g.finish ? 'MÅL' : String(i + 1);
+      const label = g.finish ? 'FINISH' : String(i + 1);
       ctx.fillStyle = i === ng ? '#000' : 'rgba(0,0,0,0.6)';
       const tw = ctx.measureText(label).width + 8;
       ctx.beginPath();
@@ -399,7 +399,7 @@ export class RadarView {
     ctx.textAlign = 'center';
     ctx.fillStyle = 'rgba(255,255,255,0.8)';
     ctx.font = '700 9px -apple-system, system-ui, sans-serif';
-    ctx.fillText('HÖJD', x0 + W / 2, y0 - 12);
+    ctx.fillText('ALT', x0 + W / 2, y0 - 12);
     // nästa port: höjdintervall
     const g = L.gates[Math.min(s.ng, L.gates.length - 1)];
     ctx.fillStyle = 'rgba(255,210,63,0.75)';

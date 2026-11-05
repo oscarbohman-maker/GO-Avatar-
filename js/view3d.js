@@ -22,10 +22,11 @@ export class View3D {
     this.renderer = new THREE.WebGLRenderer({ canvas, antialias: dpr < 2, powerPreference: 'high-performance' });
     this.renderer.setPixelRatio(dpr);
 
-    this.world = new World3D(level, { dark: this.seat === 'pilot' });
+    this.world = new World3D(level);
+    this.denseFog = this.seat === 'pilot';   // navigatören ser genom dimman
     this.rig = new PlaneRig(this.seat);
     this.world.scene.add(this.rig.root);
-    this.camera = new THREE.PerspectiveCamera(70, 1, 0.04, this.world.fog.far + 20);
+    this.camera = new THREE.PerspectiveCamera(70, 1, 0.04, this.world.maxFar + 20);
     this.blend = 0;          // 0 = utifrån, 1 = cockpit
     this.orbitA = 0;
     this.chasePos = null;
@@ -89,16 +90,20 @@ export class View3D {
 
     const cam = this.camera;
     // cockpitpose
-    rig.eyePose(this.seat, this._cp, this._cq);
+    rig.eyePose(this.seat, this._cp, this._cq, this.seat === 'pilot' ? look : null);
     // utifrånpose
     this._p.copy(outPos);
     const m = new THREE.Matrix4().lookAt(outPos, outLook, V(0, 1, 0));
     this._q.setFromRotationMatrix(m);
 
     const b = this.blend;
+    this.world.setFogMix(this.denseFog ? b : 0);
+    // rita bara så långt man ser (dimman) – sparar kraft på mobilen
+    const far = this.world.scene.fog.far + 25;
+    if (Math.abs(cam.far - far) > 2) { cam.far = far; cam.updateProjectionMatrix(); }
     cam.position.copy(this._p).lerp(this._cp, b);
     cam.quaternion.copy(this._q).slerp(this._cq, b);
-    const fov = 60 + (72 - 60) * b;
+    const fov = 60 + (78 - 60) * b;
     if (Math.abs(cam.fov - fov) > 0.01) { cam.fov = fov; cam.updateProjectionMatrix(); }
     rig.setView(b > 0.88 ? 'cockpit' : 'outside');
     this.renderer.render(this.world.scene, cam);

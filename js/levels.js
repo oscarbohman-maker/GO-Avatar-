@@ -13,16 +13,16 @@ export function mulberry32(a) {
 }
 
 export const WORLDS = [
-  { id: 'test', name: 'Testvärlden', difficulty: 'Övning', levels: ['test'], available: true },
-  { id: 'skog', name: 'Skogsdalen', difficulty: 'Lätt', levels: ['demo'], available: true },
-  { id: 'berg', name: 'Bergspasset', difficulty: 'Medel', levels: [], available: false },
-  { id: 'stad', name: 'Neonstaden', difficulty: 'Svår', levels: [], available: false },
-  { id: 'grotta', name: 'Kristallgrottan', difficulty: 'Expert', levels: [], available: false },
+  { id: 'test', name: 'Test World', difficulty: 'Practice', levels: ['test'], available: true },
+  { id: 'skog', name: 'Forest Valley', difficulty: 'Easy', levels: ['demo'], available: true },
+  { id: 'berg', name: 'Mountain Pass', difficulty: 'Medium', levels: [], available: false },
+  { id: 'stad', name: 'Neon City', difficulty: 'Hard', levels: [], available: false },
+  { id: 'grotta', name: 'Crystal Cave', difficulty: 'Expert', levels: [], available: false },
 ];
 
 export const LEVEL_INFO = {
-  test: { id: 'test', name: 'Kanjonslingan', world: 'test', difficulty: 'Övning' },
-  demo: { id: 'demo', name: 'Demo: Övningsflygningen', world: 'skog', difficulty: 'Lätt' },
+  test: { id: 'test', name: 'Canyon Loop', world: 'test', difficulty: 'Practice' },
+  demo: { id: 'demo', name: 'Demo: Training Flight', world: 'skog', difficulty: 'Easy' },
 };
 
 function distToSegment2(px, pz, ax, az, bx, bz) {
@@ -135,13 +135,13 @@ function buildDemo() {
   const zones = [];
   // Kanjon: smal passage med höga klippväggar
   corridor(boxes, 95, -368, -255, 8.5, 38, null, 'canyon');
-  zones.push({ type: 'Kanjon', x: 95, z: -311, note: `Bredd ${17 * S} m` });
+  zones.push({ type: 'Canyon', x: 95, z: -311, note: `Width ${17 * S} m` });
   // Vägg med hål
   windowWall(boxes, 95, -200, 70, 40, 13, 6);
-  zones.push({ type: 'Vägg', x: 95, z: -200, note: `Hål ${7 * S}–${19 * S} m upp` });
+  zones.push({ type: 'Wall', x: 95, z: -200, note: `Hole ${7 * S}–${19 * S} m up` });
   // Tunnel med tak
   corridor(boxes, 95, -170, -110, 7, 22, 20, 'tunnel');
-  zones.push({ type: 'Tunnel', x: 95, z: -140, note: `Tak på ${20 * S} m` });
+  zones.push({ type: 'Tunnel', x: 95, z: -140, note: `Roof at ${20 * S} m` });
 
   const bounds = { minX: -70, maxX: 160, minZ: -470, maxZ: 30 };
   const trees = [];
@@ -220,7 +220,7 @@ function buildDemo() {
     path,
     bounds,
     ceiling: 50,
-    fog: { color: 0x141c2b, near: 16, far: 78 },
+    fog: { color: 0xaec3d3, near: 20, far: 90 },
     penalties: { crash: 3, miss: 5 },
   }, S);
 }
@@ -329,8 +329,8 @@ function buildTest() {
   pillar(1, 0.5, 1); pillar(2, 0.45, -1); pillar(3, 0.5, 1); pillar(4, 0.4, -1); pillar(4, 0.75, 1);
   pillar(7, 0.5, -1); pillar(8, 0.5, 1); pillar(9, 0.5, -1);
   const zones = [
-    { type: 'Trångt', x: -15, z: -300, note: `Bredd ${16 * S} m` },
-    { type: 'Skarp sväng', x: 65, z: -385, note: 'Bromsa!' },
+    { type: 'Narrow', x: -15, z: -300, note: `Width ${16 * S} m` },
+    { type: 'Sharp turn', x: 65, z: -385, note: 'Brake!' },
   ];
   const xs = path.map((p) => p[0]), zs = path.map((p) => p[2]);
   const bounds = { minX: Math.min(...xs) - 30, maxX: Math.max(...xs) + 30, minZ: Math.min(...zs) - 30, maxZ: Math.max(...zs) + 30 };
@@ -340,7 +340,7 @@ function buildTest() {
     start: { x: start[0], y: start[1], z: start[2], yaw: yawFromDir(G[0][0] - start[0], G[0][2] - start[2]) },
     gates, trees: [], decor, rocks, boxes, zones, path, bounds,
     ceiling: 50,
-    fog: { color: 0x141c2b, near: 16, far: 78 },
+    fog: { color: 0xaec3d3, near: 20, far: 90 },
     penalties: { crash: 3, miss: 5 },
   }, S);
 }
@@ -368,12 +368,12 @@ const builders = { test: buildTest, demo: buildDemo };
 
 export function buildLevel(id) {
   const b = builders[id];
-  if (!b) throw new Error('Okänd bana: ' + id);
+  if (!b) throw new Error('Unknown level: ' + id);
   const level = b();
   addStars(level);
   level.decor = level.decor || [];
-  // Pilotens sikt: mörker och tät dimma – piloten ska behöva sin navigatör
-  level.pilotFog = { color: 0x03060b, near: 4, far: level.fog.far * 0.4 };   // ca 60 m sikt
+  // Pilotens sikt i cockpiten: stark, ljusgrå dimma (ca 60 m) – piloten ska behöva sin navigatör
+  level.pilotFog = { color: 0xc6ced6, near: 2, far: 62 };
   level._grid = buildGrid(level);
   return level;
 }
