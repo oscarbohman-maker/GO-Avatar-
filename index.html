@@ -1,0 +1,170 @@
+<!doctype html>
+<html lang="sv">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <meta name="theme-color" content="#0e1622">
+  <title>Blindflyg</title>
+  <link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+  <!-- ===== STARTSIDA ===== -->
+  <section id="screen-home" class="screen active">
+    <div class="panel home">
+      <h1 class="logo">BLIND<span>FLYG</span></h1>
+      <p class="tagline">En flyger. En ser. Tillsammans tar ni er igenom banan.</p>
+
+      <label class="field">
+        <span>Ditt namn</span>
+        <input id="name-input" maxlength="16" autocomplete="nickname" placeholder="t.ex. Kapten Oscar">
+      </label>
+
+      <button id="btn-create" class="btn primary big">Skapa spel</button>
+
+      <div class="join-row">
+        <input id="code-input" maxlength="4" placeholder="KOD" autocapitalize="characters" autocomplete="off" spellcheck="false" inputmode="text">
+        <button id="btn-join" class="btn">Gå med</button>
+      </div>
+      <p id="home-status" class="status" role="status"></p>
+
+      <button id="btn-solo" class="btn ghost">Testa solo (pilot + karta)</button>
+
+      <div id="records" class="records"></div>
+
+      <details class="howto">
+        <summary>Hur spelar man?</summary>
+        <ul>
+          <li><b>Piloten</b> flyger planet i förstaperson men ser bara en bit framåt – längre bort är allt mörkt.</li>
+          <li><b>Navigatören</b> ser en radar med alla hinder och portar och berättar hur piloten ska flyga: "sväng höger", "stig", "bromsa"...</li>
+          <li>Flyg genom portarna i ordning. Krasch = +3 s, missad port = +5 s.</li>
+          <li>Prata med varandra via röstchatten i spelet, eller ring varandra.</li>
+          <li><b>Styrning (pilot):</b> W/S eller ↑/↓ = upp/ner, A/D eller ←/→ = sväng, Mellanslag = boost, Shift = broms. På mobil/surfplatta: styrspak till vänster, knappar till höger.</li>
+        </ul>
+      </details>
+      <label class="check"><input type="checkbox" id="invert-input"> Invertera upp/ner (som en riktig styrspak)</label>
+    </div>
+  </section>
+
+  <!-- ===== LOBBY ===== -->
+  <section id="screen-lobby" class="screen">
+    <div class="panel lobby">
+      <div class="code-box">
+        <span class="label">Spelkod</span>
+        <div id="lobby-code" class="code">····</div>
+        <button id="btn-share" class="btn small">Dela länk</button>
+      </div>
+      <p id="lobby-status" class="status" role="status"></p>
+
+      <div class="players">
+        <div class="player" id="slot-me"><span class="role-icon"></span><div><b class="pname"></b><small class="prole"></small></div></div>
+        <div class="player" id="slot-friend"><span class="role-icon"></span><div><b class="pname"></b><small class="prole"></small></div></div>
+      </div>
+      <div class="lobby-row">
+        <button id="btn-swap" class="btn small host-only">⇄ Byt roller</button>
+        <button class="btn small voice-btn hidden" title="Röstchatt">🎤 Röst av</button>
+      </div>
+
+      <h3>Välj värld</h3>
+      <div id="world-list" class="worlds"></div>
+
+      <button id="btn-start" class="btn primary big host-only" disabled>Starta flygning</button>
+      <p class="guest-only waiting-text">Väntar på att värden startar...</p>
+      <button id="btn-leave" class="btn ghost">Lämna</button>
+    </div>
+  </section>
+
+  <!-- ===== SPEL ===== -->
+  <section id="screen-game" class="screen">
+    <!-- Pilotens vy -->
+    <div id="pilot-ui" class="pilot-ui hidden">
+      <div class="view3d-holder"></div>
+      <div class="vignette"></div>
+      <div class="crosshair"></div>
+      <div class="hud-top">
+        <div class="hud-item"><small>TID</small><b class="hud-time">0.0</b></div>
+        <div class="hud-item"><small>PORT</small><b class="hud-gate">1/15</b></div>
+        <div class="hud-item"><small>KRASCHER</small><b class="hud-crash">0</b></div>
+      </div>
+      <div class="hud-bottom">
+        <div class="hud-item"><small>FART</small><b class="hud-speed">0</b></div>
+        <div class="hud-item"><small>HÖJD</small><b class="hud-alt">0</b></div>
+      </div>
+      <div class="center-msg"></div>
+      <div class="wait-msg hidden"></div>
+      <canvas class="minimap hidden"></canvas>
+      <div class="touch-controls">
+        <div class="stick-zone"><div class="stick-base"><div class="stick-knob"></div></div><span class="stick-hint">Dra för att styra</span></div>
+        <div class="touch-buttons">
+          <button class="tbtn btn-boost">BOOST</button>
+          <button class="tbtn btn-brake">BROMS</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Navigatörens vy -->
+    <div id="nav-ui" class="nav-ui hidden">
+      <canvas class="radar"></canvas>
+      <div class="nav-panel">
+        <div class="nav-stats">
+          <div class="hud-item"><small>TID</small><b class="hud-time">0.0</b></div>
+          <div class="hud-item"><small>PORT</small><b class="hud-gate">1/15</b></div>
+          <div class="hud-item"><small>KRASCHER</small><b class="hud-crash">0</b></div>
+          <div class="hud-item"><small>FART</small><b class="hud-speed">0</b></div>
+        </div>
+        <div class="guide">
+          <div class="guide-turn">—</div>
+          <div class="guide-alt">—</div>
+          <div class="guide-dist"></div>
+        </div>
+      </div>
+      <div class="nav-tools">
+        <button class="btn small" data-act="zoom-in" title="Zooma in">＋</button>
+        <button class="btn small" data-act="zoom-out" title="Zooma ut">－</button>
+        <button class="btn small" data-act="mode">Nos upp</button>
+        <button class="btn small" data-act="overview">Översikt</button>
+        <button class="btn small" data-act="undo">Ångra punkt</button>
+        <button class="btn small" data-act="clear">Rensa rutt</button>
+      </div>
+      <div class="plan-box hidden">
+        <h3>Planera rutten</h3>
+        <p>Studera banan. Tryck på kartan för att sätta ut egna rutt-punkter (bara du ser dem). Piloten väntar på dig.</p>
+        <button class="btn primary big" data-act="go">Starta flygningen</button>
+      </div>
+      <div class="center-msg"></div>
+    </div>
+
+    <div class="game-menu">
+      <button class="btn small voice-btn hidden" title="Röstchatt">🎤 Röst av</button>
+      <button id="btn-restart" class="btn small">⟲ Om</button>
+      <button id="btn-tolobby" class="btn small">✕</button>
+    </div>
+
+    <div id="results" class="overlay hidden">
+      <div class="panel">
+        <h2 class="res-title">I mål!</h2>
+        <div class="res-time"></div>
+        <div class="res-details"></div>
+        <div class="res-record"></div>
+        <button id="btn-again" class="btn primary big">Flyg igen</button>
+        <button id="btn-res-lobby" class="btn">Till lobbyn</button>
+      </div>
+    </div>
+  </section>
+
+  <div id="overlay-msg" class="overlay hidden">
+    <div class="panel">
+      <h2 class="ov-title"></h2>
+      <p class="ov-text"></p>
+      <button id="btn-ov" class="btn primary">OK</button>
+    </div>
+  </div>
+  <button id="btn-audio-tap" class="btn primary audio-tap hidden">🔊 Tryck för att höra din vän</button>
+  <audio id="remote-audio" autoplay playsinline></audio>
+
+  <script src="js/lib/peerjs.min.js"></script>
+  <script type="module" src="js/main.js"></script>
+</body>
+</html>
