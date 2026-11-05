@@ -121,8 +121,8 @@ export class Avatar {
     // vila
     const X = seatX;
     this.pelvis = V(X, 0.62, 0.46);
-    this.torsoSpring = new Spring3(55, 0.55);
-    this.headSpring = new Spring3(90, 0.5);
+    this.torsoSpring = new Spring3(70, 0.9);   // nästan kritiskt dämpad: lugnt, utan studs
+    this.headSpring = new Spring3(180, 0.95);
     this.lookYaw = 0; this.lookPitch = 0;
     this.lookTarget = { yaw: 0, pitch: 0 };
     this.lean = 0;
@@ -144,11 +144,11 @@ export class Avatar {
     const X = this.seatX;
     // Överkroppens fjäder: tröghet mot planets accelerationer
     const a = ctx.accel || V();
-    const breathe = Math.sin(this.time * 1.7) * 0.006;
+    const breathe = Math.sin(this.time * 1.7) * 0.003;
     const tTarget = V(
-      THREE.MathUtils.clamp(-a.x * 0.006, -0.09, 0.09),
-      THREE.MathUtils.clamp(-a.y * 0.004, -0.06, 0.04) + breathe,
-      THREE.MathUtils.clamp(a.z * 0.005, -0.08, 0.1),
+      THREE.MathUtils.clamp(-a.x * 0.0025, -0.035, 0.035),
+      THREE.MathUtils.clamp(-a.y * 0.0018, -0.025, 0.02) + breathe,
+      THREE.MathUtils.clamp(a.z * 0.002, -0.03, 0.04),
     );
     if (ctx.shake) tTarget.add(V((Math.random() - 0.5) * ctx.shake, (Math.random() - 0.5) * ctx.shake, (Math.random() - 0.5) * ctx.shake));
     const to = this.torsoSpring.update(tTarget, dt);
@@ -161,7 +161,7 @@ export class Avatar {
     this.shoulderC.set(X + to.x, pel.y + 0.57 + to.y, pel.z - 0.24 + to.z - this.lean);
     this.neckP.copy(this.shoulderC).add(V(0, 0.09, 0.01));
     // huvudet hänger i en egen, lite slappare fjäder
-    const hTarget = V(this.neckP.x + to.x * 0.6, this.neckP.y + 0.18, this.neckP.z + to.z * 0.6);
+    const hTarget = V(this.neckP.x + to.x * 0.3, this.neckP.y + 0.18, this.neckP.z + to.z * 0.3);
     const hp = this.headSpring.update(hTarget, dt);
     this.headP.copy(hp);
 
@@ -169,7 +169,7 @@ export class Avatar {
     const k = Math.min(1, dt * 5);
     this.lookYaw += ((ctx.look ? ctx.look.yaw : 0) - this.lookYaw) * k;
     this.lookPitch += ((ctx.look ? ctx.look.pitch : 0) - this.lookPitch) * k;
-    const tilt = THREE.MathUtils.clamp(-to.x * 2.2, -0.25, 0.25);
+    const tilt = THREE.MathUtils.clamp(-to.x * 1.0, -0.05, 0.05);
     this.headQuat.setFromEuler(new THREE.Euler(this.lookPitch, this.lookYaw, tilt, 'YXZ'));
     this.head.position.copy(this.headP);
     this.head.quaternion.copy(this.headQuat);

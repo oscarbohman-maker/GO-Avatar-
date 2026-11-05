@@ -2,6 +2,17 @@
 // Körs hos piloten (auktoritativ) och skickas sedan till navigatören.
 
 import { stepFlight, checkPlaneCollision, gateCrossing, yawFromDir, forward, newPlane, FLIGHT } from './physics.js';
+import { STAR_BONUS, STAR_RADIUS } from './levels.js';
+
+// Kortaste avståndet från punkten c till sträckan a-b (3D)
+function segDist2(a, b, c) {
+  const vx = b[0] - a[0], vy = b[1] - a[1], vz = b[2] - a[2];
+  const L = vx * vx + vy * vy + vz * vz;
+  let t = L > 0 ? ((c.x - a[0]) * vx + (c.y - a[1]) * vy + (c.z - a[2]) * vz) / L : 0;
+  t = Math.max(0, Math.min(1, t));
+  const dx = a[0] + vx * t - c.x, dy = a[1] + vy * t - c.y, dz = a[2] + vz * t - c.z;
+  return dx * dx + dy * dy + dz * dz;
+}
 
 export const STEP = 1 / 60;
 export const CRASH_TIME = 2.0;  // sekunder som planet tumlar efter en krasch
@@ -30,9 +41,11 @@ export class FlightSession {
     this.grace = 0;
     this.lastCrash = null;
     this.tumble = null;
+    this.stars = new Set();
   }
 
-  get time() { return this.flightTime + this.penalty; }
+  get bonus() { return this.stars.size * STAR_BONUS; }
+  get time() { return Math.max(0, this.flightTime + this.penalty - this.bonus); }
 
   begin() {
     if (this.phase !== 'waiting') return;
@@ -105,6 +118,16 @@ export class FlightSession {
     if (p.y > this.level.ceiling) { p.y = this.level.ceiling; if (p.pitch > 0) { p.pitch *= 0.9; p.pitchRate = Math.min(0, p.pitchRate); } }
     const p1 = [p.x, p.y, p.z];
 
+    // stjärnor: flyg igenom för bonus
+    const stars = this.level.stars || [];
+    for (const st of stars) {
+      if (this.stars.has(st.idx)) continue;
+      if (segDist2(p0, p1, st) < STAR_RADIUS * STAR_RADIUS) {
+        this.stars.add(st.idx);
+        this.onEvent({ kind: 'star', idx: st.idx, count: this.stars.size, total: stars.length });
+      }
+    }
+
     const g = this.level.gates[this.nextGate];
     const cross = gateCrossing(g, p0, p1);
     if (cross === 'pass' || cross === 'miss') {
@@ -114,7 +137,7 @@ export class FlightSession {
       this.onEvent({ kind: cross, gate: g.idx, finished });
       if (finished) {
         this.phase = 'finished';
-        this.onEvent({ kind: 'finish', time: this.time, crashes: this.crashes, misses: this.misses });
+        this.onEvent({ kind: 'finish', time: this.time, crashes: this.crashes, misses: this.misses, stars: this.stars.size, totalStars: stars.length });
         return;
       }
     }
@@ -139,7 +162,7 @@ export class FlightSession {
     return {
       t: 'st', x: r(p.x), y: r(p.y), z: r(p.z), yw: r(p.yaw, 1000), pt: r(p.pitch, 1000), rl: r(p.roll, 1000),
       sp: r(p.speed, 10), ng: this.nextGate, tm: r(this.time, 10), cr: this.crashes, ms: this.misses,
-      ph: this.phase, cd: r(this.countdown, 10),
+      ph: this.phase, cd: r(this.countdown, 10), sc: this.stars.size,
       // för kroppar, rattar och instrument hos navigatören
       ix: r(p.ix), iy: r(p.iy), th: p.throttle, ln: r(p.loadN), al: r(p.accLong, 10), ra: r(p.rollAcc, 10),
     };

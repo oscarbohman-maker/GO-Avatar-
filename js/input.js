@@ -80,7 +80,7 @@ export class Input {
   }
 
   _moveStick(e) {
-    const R = 55;
+    const R = 70;
     let dx = e.clientX - this.stick.cx, dy = e.clientY - this.stick.cy;
     const d = Math.hypot(dx, dy);
     if (d > R) { dx *= R / d; dy *= R / d; }
@@ -93,13 +93,13 @@ export class Input {
     const k = this.keys;
     const tx = (k.has('ArrowRight') || k.has('KeyD') ? 1 : 0) - (k.has('ArrowLeft') || k.has('KeyA') ? 1 : 0);
     const ty = (k.has('ArrowUp') || k.has('KeyW') ? 1 : 0) - (k.has('ArrowDown') || k.has('KeyS') ? 1 : 0);
-    const rate = Math.min(1, dt * 7);
+    const rate = Math.min(1, dt * 2.8);   // tangenterna ramper upp mjukt
     this.kx += (tx - this.kx) * rate;
     this.ky += (ty - this.ky) * rate;
     let x = this.kx, y = this.ky;
     if (this.stick.active) {
       // liten dödzon och mjukare kurva för finkänslig styrning
-      const curve = (v) => (Math.abs(v) < 0.08 ? 0 : Math.sign(v) * Math.pow(Math.abs(v), 1.4));
+      const curve = (v) => (Math.abs(v) < 0.1 ? 0 : Math.sign(v) * Math.pow((Math.abs(v) - 0.1) / 0.9, 1.8));
       x = curve(this.stick.x); y = curve(this.stick.y);
     }
     if (this.invertY) y = -y;

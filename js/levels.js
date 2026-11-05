@@ -13,6 +13,7 @@ export function mulberry32(a) {
 }
 
 export const WORLDS = [
+  { id: 'test', name: 'Testvärlden', difficulty: 'Övning', levels: ['test'], available: true },
   { id: 'skog', name: 'Skogsdalen', difficulty: 'Lätt', levels: ['demo'], available: true },
   { id: 'berg', name: 'Bergspasset', difficulty: 'Medel', levels: [], available: false },
   { id: 'stad', name: 'Neonstaden', difficulty: 'Svår', levels: [], available: false },
@@ -20,6 +21,7 @@ export const WORLDS = [
 ];
 
 export const LEVEL_INFO = {
+  test: { id: 'test', name: 'Testflygning med stjärnor', world: 'test', difficulty: 'Övning' },
   demo: { id: 'demo', name: 'Demo: Övningsflygningen', world: 'skog', difficulty: 'Lätt' },
 };
 
@@ -103,9 +105,9 @@ function buildDemo() {
     [0, 15, -70, 5],
     [18, 20, -140, 5],
     [0, 12, -210, 5],
-    [-22, 9, -260, 4.5],   // skogen börjar
-    [8, 10, -305, 4.5],
-    [-12, 9, -350, 4.5],
+    [-16, 9, -260, 4.5],   // skogen börjar
+    [6, 10, -305, 4.5],
+    [-9, 9, -350, 4.5],
     [0, 14, -410, 5],      // skarp högersväng efter denna
     [55, 14, -430, 5],
     [95, 16, -398, 5],     // hårnål in mot kanjonen
@@ -155,7 +157,7 @@ function buildDemo() {
     const z = forest.minZ + rand() * (forest.maxZ - forest.minZ);
     const baseR = 1.8 + rand() * 1.4;
     if (distToPath(path, x, z) < 6.2 + baseR) continue;
-    if (nearGate(x, z, 11 + baseR)) continue;
+    if (nearGate(x, z, 14 + baseR)) continue;
     if (trees.some((t) => (t.x - x) ** 2 + (t.z - z) ** 2 < (t.baseR + baseR) ** 2 * 0.8)) continue;
     const h = 16 + rand() * 12;
     trees.push({ x, z, baseR, h, trunkH: 3 + rand() * 2, trunkR: 0.45 });
@@ -181,8 +183,8 @@ function buildDemo() {
     const x = rockArea.minX + rand() * (rockArea.maxX - rockArea.minX);
     const z = rockArea.minZ + rand() * (rockArea.maxZ - rockArea.minZ);
     const r = 1.8 + rand() * 2.2;
-    if (distToPath(path, x, z) < 7 + r) continue;
-    if (nearGate(x, z, 11 + r)) continue;
+    if (distToPath(path, x, z) < 9 + r) continue;
+    if (nearGate(x, z, 14 + r)) continue;
     if (blockedByBox(x, z, 2 + r)) continue;
     if (rocks.some((o) => (o.x - x) ** 2 + (o.z - z) ** 2 < (o.r + r + 3) ** 2)) continue;
     rocks.push({ x, z, r, h: 20 + rand() * 25 });
@@ -222,12 +224,96 @@ function buildDemo() {
   }, S);
 }
 
-const builders = { demo: buildDemo };
+// Testvärlden: öppen äng, breda portar, glesa träd och gott om stjärnor.
+// Tänkt för att öva med NPC-navigatören.
+function buildTest() {
+  const S = WORLD_SCALE;
+  const rand = mulberry32(4242);
+  const start = [0, 15, 0];
+  const G = [
+    [0, 15, -80, 6.5],
+    [25, 18, -160, 6.5],
+    [0, 14, -240, 6.5],
+    [-30, 12, -320, 6.5],
+    [-10, 16, -400, 6.5],
+    [30, 20, -450, 6.5],
+    [75, 15, -430, 6.5],
+    [85, 12, -340, 6.5],
+    [65, 15, -220, 6.5],
+    [40, 15, -110, 7],      // mål
+  ];
+  const path = [start, ...G.map((g) => [g[0], g[1], g[2]])];
+  const gates = G.map((g, i) => {
+    const prev = path[i];
+    const next = path[i + 2] || null;
+    const dx = next ? next[0] - prev[0] : g[0] - prev[0];
+    const dz = next ? next[2] - prev[2] : g[2] - prev[2];
+    return { idx: i, x: g[0], y: g[1], z: g[2], r: g[3], tube: 0.35, yaw: yawFromDir(dx, dz), finish: i === G.length - 1 };
+  });
+  const bounds = { minX: -80, maxX: 140, minZ: -500, maxZ: 30 };
+  const nearGate = (x, z, d) => gates.some((g) => (g.x - x) ** 2 + (g.z - z) ** 2 < d * d);
+  const trees = [];
+  const rocks = [];
+  // glesa träd överallt (bra riktmärken), med stort avstånd till rutten
+  let tries = 0;
+  while (tries++ < 4000 && trees.length < 160) {
+    const x = bounds.minX - 40 + rand() * (bounds.maxX - bounds.minX + 80);
+    const z = bounds.minZ - 40 + rand() * (bounds.maxZ - bounds.minZ + 80);
+    const baseR = 1.6 + rand() * 1.4;
+    if (distToPath(path, x, z) < 14 + baseR) continue;
+    if (nearGate(x, z, 16)) continue;
+    if (trees.some((t) => (t.x - x) ** 2 + (t.z - z) ** 2 < (t.baseR + baseR + 4) ** 2)) continue;
+    trees.push({ x, z, baseR, h: 9 + rand() * 12, trunkH: 2 + rand() * 2, trunkR: 0.45 });
+  }
+  // några pelare att väja för, en bit från rutten
+  tries = 0;
+  while (tries++ < 2000 && rocks.length < 10) {
+    const x = bounds.minX + rand() * (bounds.maxX - bounds.minX);
+    const z = bounds.minZ + rand() * (bounds.maxZ - bounds.minZ);
+    const r = 1.4 + rand() * 1.2;
+    if (distToPath(path, x, z) < 10 + r) continue;
+    if (nearGate(x, z, 14 + r)) continue;
+    if (rocks.some((o) => (o.x - x) ** 2 + (o.z - z) ** 2 < (o.r + r + 6) ** 2)) continue;
+    rocks.push({ x, z, r, h: 25 + rand() * 15 });
+  }
+  const keptTrees = trees.filter((t) => !rocks.some((o) => (o.x - t.x) ** 2 + (o.z - t.z) ** 2 < (o.r + t.baseR + 1) ** 2));
+  return scaleLevel({
+    id: 'test',
+    name: LEVEL_INFO.test.name,
+    start: { x: start[0], y: start[1], z: start[2], yaw: yawFromDir(G[0][0] - start[0], G[0][2] - start[2]) },
+    gates, trees: keptTrees, rocks, boxes: [], zones: [], path, bounds,
+    ceiling: 50,
+    fog: { color: 0x141c2b, near: 16, far: 78 },
+    penalties: { crash: 3, miss: 5 },
+  }, S);
+}
+
+// Belöningar: stjärnor längs den raka linjen mellan portarna (som är fri från hinder).
+// Flyger man igenom en stjärna dras 1 sekund av från tiden.
+export const STAR_BONUS = 1;
+export const STAR_RADIUS = 6;
+
+function addStars(level) {
+  const P = level.path;
+  const stars = [];
+  for (let i = 0; i < P.length - 1; i++) {
+    const a = P[i], b = P[i + 1];
+    const len = Math.hypot(b[0] - a[0], b[2] - a[2]);
+    const ts = len > 140 ? [0.35, 0.65] : [0.5];
+    for (const t of ts) {
+      stars.push({ idx: stars.length, x: a[0] + (b[0] - a[0]) * t, y: a[1] + (b[1] - a[1]) * t, z: a[2] + (b[2] - a[2]) * t });
+    }
+  }
+  level.stars = stars;
+}
+
+const builders = { test: buildTest, demo: buildDemo };
 
 export function buildLevel(id) {
   const b = builders[id];
   if (!b) throw new Error('Okänd bana: ' + id);
   const level = b();
+  addStars(level);
   level._grid = buildGrid(level);
   return level;
 }

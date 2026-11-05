@@ -97,6 +97,28 @@ export class World3D {
     this._shownGate = -1;
     this.updateGates(0);
 
+    // belöningar: snurrande guldstjärnor att flyga igenom
+    const starShape = new THREE.Shape();
+    for (let i = 0; i < 10; i++) {
+      const a = (i / 10) * Math.PI * 2 + Math.PI / 2;
+      const r = i % 2 ? 1.1 : 2.6;
+      const x = Math.cos(a) * r, y = Math.sin(a) * r;
+      if (i) starShape.lineTo(x, y); else starShape.moveTo(x, y);
+    }
+    const starGeo = new THREE.ExtrudeGeometry(starShape, { depth: 0.5, bevelEnabled: true, bevelSize: 0.25, bevelThickness: 0.25, bevelSegments: 2 });
+    starGeo.translate(0, 0, -0.25);
+    const starMat = new THREE.MeshLambertMaterial({ color: 0xffd23f, emissive: 0xffb300, emissiveIntensity: 0.9 });
+    const haloMat = new THREE.MeshBasicMaterial({ color: 0xfff1a8, transparent: true, opacity: 0.18, depthWrite: false });
+    const haloGeo = new THREE.SphereGeometry(4.2, 16, 12);
+    this.starMeshes = (L.stars || []).map((s) => {
+      const grp = new THREE.Group();
+      grp.position.set(s.x, s.y, s.z);
+      grp.add(new THREE.Mesh(starGeo, starMat), new THREE.Mesh(haloGeo, haloMat));
+      scene.add(grp);
+      return grp;
+    });
+    this.time = 0;
+
     // navigatörens rutt: små lysande prickar (syns bara nära, i dimman)
     this.routeMat = new THREE.MeshBasicMaterial({ color: 0x4dd0ff, transparent: true, opacity: 0.45, depthWrite: false });
     this.routeGeo = new THREE.SphereGeometry(0.45, 8, 6);
@@ -117,6 +139,21 @@ export class World3D {
       mesh.material.emissiveIntensity = i === ng ? 0.6 : 0;
       mesh.material.transparent = i < ng;
       mesh.material.opacity = i < ng ? 0.35 : 1;
+    });
+  }
+
+  setStarCollected(idx, collected = true) {
+    const m = this.starMeshes[idx];
+    if (m) m.visible = !collected;
+  }
+
+  resetStars() { this.starMeshes.forEach((m) => { m.visible = true; }); }
+
+  animate(dt) {
+    this.time += dt;
+    this.starMeshes.forEach((m, i) => {
+      m.rotation.y = this.time * 2 + i;
+      m.children[0].position.y = Math.sin(this.time * 2.5 + i) * 0.4;
     });
   }
 

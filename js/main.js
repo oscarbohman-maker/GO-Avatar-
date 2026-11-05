@@ -2,8 +2,9 @@
 import { Net, PROTOCOL_VERSION, normalizeCode } from './net.js';
 import { Voice } from './voice.js';
 import { Store } from './storage.js';
-import { WORLDS, LEVEL_INFO, buildLevel } from './levels.js';
+import { WORLDS, LEVEL_INFO, buildLevel, STAR_BONUS } from './levels.js';
 import { sfx, unlockAudio } from './sfx.js';
+import { NpcNavigator, NpcVoice } from './npc.js';
 
 const $ = (s, r = document) => r.querySelector(s);
 const $$ = (s, r = document) => Array.from(r.querySelectorAll(s));
@@ -22,6 +23,8 @@ const app = {
   friendName: null,
   levelId: 'demo',
   solo: false,
+  npc: false,        // solo med NPC-navigatör
+  npcVoice: null,
   game: null,
   inGame: false,
 };
@@ -96,7 +99,14 @@ function initHome() {
     if (code.length !== 4) { setStatus($('#home-status'), 'Koden ska vara 4 tecken.', 'error'); return; }
     joinGame(code);
   };
-  $('#btn-solo').onclick = () => { unlockAudio(); startSolo(); };
+  $('#btn-solo').onclick = () => { unlockAudio(); startSolo(false); };
+  $('#btn-npc').onclick = () => {
+    unlockAudio();
+    // talet måste "låsas upp" direkt i knapptrycket (Safari)
+    if (!app.npcVoice) app.npcVoice = new NpcVoice();
+    app.npcVoice.unlock();
+    startSolo(true);
+  };
   renderRecords();
 
   // Inbjudningslänk: ?join=KOD
@@ -125,6 +135,7 @@ function goHome(statusText, cls) {
   endGame();
   cleanupNet();
   app.solo = false;
+  app.npc = false;
   document.body.classList.remove('is-host');
   show('screen-home');
   renderRecords();
@@ -391,6 +402,11 @@ function handleEvent(e) {
       break;
     case 'miss': flash(`Missad port ${e.gate + 1}! <small>+${g.level.penalties.miss} s</small>`, 'bad', 1300, true); sfx.miss(); break;
     case 'crash': flash(`KRASCH! <small>in i ${esc(e.what)} · +${g.level.penalties.crash} s</small>`, 'bad', 1300, true); sfx.crash(); break;
+    case 'star':
+      flash(`⭐ ${e.count}/${e.total} <small>−${STAR_BONUS} s</small>`, 'good', 700, true);
+      sfx.star();
+      if (g.onStar) g.onStar(e.idx);
+      break;
     case 'finish': sfx.finish(); showResults(e); break;
   }
 }
@@ -402,6 +418,7 @@ function updateHud(root, snap, level) {
   $$('.hud-crash', root).forEach((el) => { el.textContent = String(snap.cr); });
   $$('.hud-speed', root).forEach((el) => { el.textContent = String(Math.round(snap.sp * 3.6)); });
   $$('.hud-alt', root).forEach((el) => { el.textContent = Math.round(snap.y) + ' m'; });
+  $$('.hud-star', root).forEach((el) => { el.textContent = (snap.sc || 0) + '/' + ((level.stars && level.stars.length) || 0); });
 }
 
 function countdownDisplay(g, snap) {
@@ -449,10 +466,14 @@ async function startGame() {
         g._gt = setTimeout(() => el.classList.remove('show'), 1600);
       },
       setRoute: (pts) => pv.setRoute(pts),
+      onStar: (idx) => { pv.view.world.setStarCollected(idx); if (minimap) minimap.collected.add(idx); },
       restart: (notify) => {
         pv.restart();
+        pv.view.world.resetStars();
+        if (npc) { npc = new NpcNavigator(level); setSub(''); }
         $('#results').classList.add('hidden');
         if (minimap) minimap.resetTrail();
+        if (minimap) minimap.collected = new Set();
         if (notify && app.net) app.net.send({ t: 'restart' });
         if (app.solo) g.begin();
         else showWait();
@@ -464,11 +485,37 @@ async function startGame() {
       w.classList.remove('hidden');
     };
     let minimap = null;
+    // NPC-navigatör (testvärlden)
+    let npc = app.npc ? new NpcNavigator(level) : null;
+    const voice = app.npc ? (app.npcVoice || (app.npcVoice = new NpcVoice())) : null;
+    const sub = $('.npc-sub', pilotUI);
+    sub.classList.toggle('hidden', !npc);
+    const voiceBtn = $('#btn-npc-voice');
+    voiceBtn.classList.toggle('hidden', !npc);
+    if (voice) {
+      const syncVoice = () => { voiceBtn.textContent = voice.enabled ? '🔊 Röst' : '🔇 Röst'; };
+      syncVoice();
+      voiceBtn.onclick = () => { voice.enabled = !voice.enabled; if (!voice.enabled) voice.stop(); syncVoice(); };
+    }
+    let subT = null;
+    const setSub = (text) => {
+      $('.npc-text', sub).textContent = text;
+      sub.classList.remove('fade');
+      clearTimeout(subT);
+      subT = setTimeout(() => sub.classList.add('fade'), 2500);
+    };
+    const npcSay = (text, gesture) => {
+      if (!text) return;
+      setSub(text);
+      if (voice) voice.say(text);
+      if (gesture) g.gesture(gesture);
+    };
     const pv = new PilotView(pilotUI, level, {
       invertY: Store.profile.invertY,
       onEvent: (e) => {
         handleEvent(e);
         if (app.net) app.net.send({ t: 'ev', e });
+        if (npc) npcSay(npc.onEvent(e, level));
       },
       onFrame: (S, dt) => {
         const snap = S.snapshot();
@@ -476,13 +523,17 @@ async function startGame() {
         countdownDisplay(g, snap);
         pilotUI.classList.toggle('outside', snap.ph !== 'fly');
         if (minimap) minimap.setState(snap);
+        if (npc) {
+          const out = npc.update(dt, S);
+          if (out && out.say) npcSay(out.say, out.gesture);
+        }
         sendT += dt;
         if (app.net && sendT >= 0.05) { sendT = 0; app.net.send(snap); }
       },
     });
     g.view = pv;
     app.game = g;
-    if (app.solo) {
+    if (app.solo && !app.npc) {
       const mm = $('.minimap', pilotUI);
       mm.classList.remove('hidden');
       const { RadarView } = await import('./radar.js');
@@ -494,6 +545,7 @@ async function startGame() {
     }
     pv.start();
     if (app.solo) g.begin(); else showWait();
+    if (npc) setSub('Hej! Jag ser banan åt dig. Lyssna på mig så flyger vi igenom portarna.');
   } else {
     const { RadarView } = await import('./radar.js');
     if (!app.inGame) return;
@@ -537,8 +589,13 @@ async function startGame() {
           if (app.net) app.net.send({ t: 'go' });
         } else if (snap.ph !== 'waiting') g.goSentAt = 0;
       },
+      onStar: (idx) => {
+        rv.collected.add(idx);
+        if (pip) pip.view.world.setStarCollected(idx);
+      },
       planning: () => {
         g.goSentAt = 0;
+        if (pip) pip.view.world.resetStars();
         rv.setMode('overview');
         rv.resetTrail();
         planBox.classList.remove('hidden');
@@ -646,13 +703,13 @@ function showResults(e) {
   if (!g) return;
   const role = g.role;
   const isRecord = Store.addResult({
-    level: g.level.id, time: Math.round(e.time * 10) / 10, crashes: e.crashes, misses: e.misses,
-    role, partner: app.solo ? null : app.friendName, solo: app.solo,
+    level: g.level.id, time: Math.round(e.time * 10) / 10, crashes: e.crashes, misses: e.misses, stars: e.stars || 0,
+    role, partner: app.npc ? 'NPC' : app.solo ? null : app.friendName, solo: app.solo,
   });
   const res = $('#results');
   $('.res-title', res).textContent = 'I mål!';
   $('.res-time', res).textContent = e.time.toFixed(1) + ' s';
-  $('.res-details', res).textContent = `${e.crashes} krascher · ${e.misses} missade portar`;
+  $('.res-details', res).textContent = `⭐ ${e.stars || 0}/${e.totalStars || 0} stjärnor · ${e.crashes} krascher · ${e.misses} missade portar`;
   $('.res-record', res).textContent = isRecord ? '🏆 Nytt rekord!' : '';
   res.classList.remove('hidden');
 }
@@ -669,6 +726,8 @@ function endGame() {
   $('#results').classList.add('hidden');
   $$('.center-msg').forEach((el) => { el.className = 'center-msg'; });
   $$('.gesture-hint').forEach((el) => el.classList.remove('show'));
+  if (app.npcVoice) app.npcVoice.stop();
+  $('#btn-npc-voice').classList.add('hidden');
   const pipEl = $('.pip');
   if (pipEl) pipEl.classList.remove('hidden');
   const pipBtn = $('[data-act="pip"]');
@@ -677,11 +736,13 @@ function endGame() {
   app.wakeLock = null;
 }
 
-function startSolo() {
+function startSolo(npc) {
   cleanupNet();
   app.solo = true;
+  app.npc = !!npc;
   app.isHost = true;
   app.hostRole = 'pilot';
+  app.levelId = npc ? 'test' : 'demo';
   startGame();
 }
 

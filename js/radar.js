@@ -36,6 +36,7 @@ export class RadarView {
     this.route = [];
     this.trail = [];
     this.insets = null;
+    this.collected = new Set();
     this.trailT = 0;
     this.state = null;      // senaste mottagna
     this.view = null;       // utjämnat visningstillstånd
@@ -75,7 +76,7 @@ export class RadarView {
   zoom(d) { this.zoomIdx = Math.max(0, Math.min(ZOOMS.length - 1, this.zoomIdx + d)); }
   undoRoute() { this.route.pop(); this.onRouteChange(this.route); }
   clearRoute() { this.route = []; this.onRouteChange(this.route); }
-  resetTrail() { this.trail = []; }
+  resetTrail() { this.trail = []; this.collected = new Set(); }
 
   resize() {
     const dpr = Math.min(window.devicePixelRatio || 1, 2);
@@ -255,6 +256,21 @@ export class RadarView {
         ctx.fill();
       }
     });
+
+    // stjärnor (belöningar) som inte är tagna
+    for (const s of L.stars || []) {
+      if (this.collected.has(s.idx)) continue;
+      ctx.fillStyle = 'rgba(255,210,63,0.85)';
+      ctx.beginPath();
+      for (let i = 0; i < 10; i++) {
+        const a = (i / 10) * Math.PI * 2 - Math.PI / 2;
+        const r = (i % 2 ? 2.2 : 5.2) * Math.max(1, 1.6 * px);
+        const x = s.x + Math.cos(a) * r, z = s.z + Math.sin(a) * r;
+        if (i) ctx.lineTo(x, z); else ctx.moveTo(x, z);
+      }
+      ctx.closePath();
+      ctx.fill();
+    }
 
     // egen rutt
     if (this.route.length) {

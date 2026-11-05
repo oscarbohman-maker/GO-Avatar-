@@ -30,6 +30,7 @@
       </div>
       <p id="home-status" class="status" role="status"></p>
 
+      <button id="btn-npc" class="btn npc-btn">🧑‍✈️ Testvärld med NPC-navigatör</button>
       <button id="btn-solo" class="btn ghost">Testa solo (pilot + karta)</button>
 
       <div id="records" class="records"></div>
@@ -88,6 +89,7 @@
         <div class="hud-item"><small>TID</small><b class="hud-time">0.0</b></div>
         <div class="hud-item"><small>PORT</small><b class="hud-gate">1/15</b></div>
         <div class="hud-item"><small>KRASCHER</small><b class="hud-crash">0</b></div>
+        <div class="hud-item"><small>STJÄRNOR</small><b class="hud-star">0</b></div>
       </div>
       <div class="hud-bottom">
         <div class="hud-item"><small>FART</small><b class="hud-speed">0</b></div>
@@ -96,6 +98,7 @@
       <div class="look-zone" title="Dra för att titta runt"></div>
       <div class="center-msg"></div>
       <div class="gesture-hint"></div>
+      <div class="npc-sub hidden"><span class="npc-name">Navigatören:</span> <span class="npc-text"></span></div>
       <div class="wait-msg hidden"></div>
       <div class="key-hint">Q/E: titta runt · Mellanslag: gas · Shift: broms</div>
       <canvas class="minimap hidden"></canvas>
@@ -121,6 +124,7 @@
           <div class="hud-item"><small>PORT</small><b class="hud-gate">1/15</b></div>
           <div class="hud-item"><small>KRASCHER</small><b class="hud-crash">0</b></div>
           <div class="hud-item"><small>FART</small><b class="hud-speed">0</b></div>
+          <div class="hud-item"><small>⭐</small><b class="hud-star">0</b></div>
         </div>
         <div class="guide">
           <div class="guide-turn">—</div>
@@ -155,6 +159,7 @@
 
     <div class="game-menu">
       <button class="btn small voice-btn hidden" title="Röstchatt">🎤 Röst av</button>
+      <button id="btn-npc-voice" class="btn small hidden" title="NPC:ns röst">🔊 Röst</button>
       <button id="btn-restart" class="btn small">⟲ Om</button>
       <button id="btn-tolobby" class="btn small">✕</button>
     </div>

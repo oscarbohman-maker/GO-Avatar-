@@ -16,24 +16,24 @@ export const MISS_RADIUS = 50;   // passerar man portens plan inom detta avstån
 
 export const FLIGHT = {
   cruise: 44,        // m/s (≈ 160 km/h)
-  boost: 64,
+  boost: 62,
   brake: 28,
   minSpeed: 22,
   maxSpeed: 85,
-  thrustResp: 0.9,   // hur snabbt farten närmar sig gaspådraget
-  gAlong: 14,        // gravitationens effekt på farten i stigning/dykning
-  maxRoll: 1.0,      // rad (≈ 57°)
-  rollK: 30,         // fjäderstyvhet för rollen
-  rollC: 10,         // dämpning för rollen
-  turnG: 50,         // "svängkraft" – ger ca 1.8 rad/s vid full bank och marschfart
-  maxYawRate: 2.4,
-  pitchRate: 1.15,
-  pitchResp: 7,
-  maxPitch: 0.9,
-  autoLevel: 1.6,
-  bankSink: 5,       // m/s sjunkhastighet vid full bank
-  turbRoll: 0.9,     // rad/s² turbulens i rollen
-  turbLift: 0.6,     // m/s vertikala vindbyar
+  thrustResp: 0.8,   // hur snabbt farten närmar sig gaspådraget
+  gAlong: 12,        // gravitationens effekt på farten i stigning/dykning
+  maxRoll: 0.75,     // rad (≈ 43°) – lugnare bankning
+  rollK: 12,         // mjukare fjäder för rollen (långsammare, jämnare rörelser)
+  rollC: 7,          // dämpning (≈ kritisk) – ingen översväng
+  turnG: 64,         // ger ca 1.35 rad/s vid full bank och marschfart
+  maxYawRate: 1.9,
+  pitchRate: 0.75,
+  pitchResp: 4,
+  maxPitch: 0.7,
+  autoLevel: 1.2,
+  bankSink: 3,       // m/s sjunkhastighet vid full bank
+  turbRoll: 0.3,     // rad/s² turbulens i rollen (svag)
+  turbLift: 0.25,    // m/s vertikala vindbyar (svaga)
 };
 
 const clamp = (v, a, b) => (v < a ? a : v > b ? b : v);
@@ -153,24 +153,18 @@ export function gateLocal(g, x, y, z) {
   return { s, radial };
 }
 
-function hitGateRing(g, x, y, z, r) {
-  const { s, radial } = gateLocal(g, x, y, z);
-  if (Math.abs(s) > g.tube + r) return false;
-  const d = Math.sqrt(s * s + (radial - g.r) * (radial - g.r));
-  return d < g.tube + r;
-}
 
 // Kollisionspunkter på planet (lokalt: x höger, y upp, -z fram).
-// Vingarna krockar med träd, klippor och väggar men inte med portarnas ringar.
+// Portarnas ringar och stjärnorna kan man alltid flyga igenom – de krockar man aldrig med.
 export const PROBES = [
-  { name: 'kropp', p: [0, 0, 0], r: PLANE_R, rings: true },
-  { name: 'nos', p: [0, 0, -5.4], r: 0.9, rings: true },
-  { name: 'stjärt', p: [0, 0.9, 5.6], r: 0.8, rings: false },
-  { name: 'vänster vinge', p: [-6.4, -0.05, -0.3], r: 0.5, rings: false },
-  { name: 'höger vinge', p: [6.4, -0.05, -0.3], r: 0.5, rings: false },
+  { name: 'kropp', p: [0, 0, 0], r: PLANE_R },
+  { name: 'nos', p: [0, 0, -5.4], r: 0.9 },
+  { name: 'stjärt', p: [0, 0.9, 5.6], r: 0.8 },
+  { name: 'vänster vinge', p: [-6.4, -0.05, -0.3], r: 0.5 },
+  { name: 'höger vinge', p: [6.4, -0.05, -0.3], r: 0.5 },
 ];
 
-function hitAt(level, x, y, z, r, rings) {
+function hitAt(level, x, y, z, r) {
   if (y < GROUND_Y * (r / PLANE_R)) return 'marken';
   const grid = level._grid;
   const cands = grid ? grid.query(x, z) : null;
@@ -179,13 +173,12 @@ function hitAt(level, x, y, z, r, rings) {
   for (const t of trees) if (hitTree(t, x, y, z, r)) return 'ett träd';
   for (const o of rocks) if (hitRock(o, x, y, z, r)) return 'en klippa';
   for (const b of level.boxes) if (hitBox(b, x, y, z, r)) return b.kind === 'roof' ? 'tunneltaket' : b.kind === 'canyon' ? 'kanjonväggen' : 'en vägg';
-  if (rings) for (const g of level.gates) if (hitGateRing(g, x, y, z, r)) return 'portens ram';
   return null;
 }
 
 // Punktkollision (används av test och för respawn-kontroller)
 export function checkCollision(level, x, y, z, r = PLANE_R) {
-  const hit = hitAt(level, x, y, z, r, true);
+  const hit = hitAt(level, x, y, z, r);
   if (hit) return hit;
   const B = level.bounds, m = 140;
   if (x < B.minX - m || x > B.maxX + m || z < B.minZ - m || z > B.maxZ + m) return 'utanför banan';
@@ -197,7 +190,7 @@ export function checkPlaneCollision(level, s) {
   for (const pr of PROBES) {
     const w = rotYXZ(pr.p[0], pr.p[1], pr.p[2], s.yaw, s.pitch, s.roll);
     const x = s.x + w[0], y = s.y + w[1], z = s.z + w[2];
-    const hit = hitAt(level, x, y, z, pr.r, pr.rings);
+    const hit = hitAt(level, x, y, z, pr.r);
     if (hit) return pr.name === 'kropp' || pr.name === 'nos' ? hit : hit + ' (' + pr.name + ')';
   }
   const B = level.bounds, m = 140;

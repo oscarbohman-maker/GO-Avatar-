@@ -32,6 +32,7 @@ function tone(freq, dur, type = 'sine', vol = 0.15, when = 0, slideTo = null) {
 export const sfx = {
   tick() { tone(660, 0.12, 'square', 0.08); },
   go() { tone(990, 0.35, 'square', 0.1); },
+  star() { tone(1320, 0.08, 'triangle', 0.12); tone(1760, 0.12, 'triangle', 0.1, 0.06); },
   gate() { tone(880, 0.1, 'sine', 0.15); tone(1320, 0.15, 'sine', 0.12, 0.08); },
   miss() { tone(300, 0.25, 'sawtooth', 0.08); },
   crash() { tone(200, 0.5, 'sawtooth', 0.15, 0, 40); },

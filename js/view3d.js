@@ -54,6 +54,7 @@ export class View3D {
     const rig = this.rig;
     rig.update(dt, st, this.seat === 'pilot' ? { pilotLook: look } : { copilotLook: look });
     this.world.updateGates(st.ng || 0);
+    this.world.animate(dt);
 
     // Vilken kameraposition vill vi ha?
     let target;

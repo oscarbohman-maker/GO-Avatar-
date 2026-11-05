@@ -7,7 +7,11 @@ Ett samarbetsspel för två i webbläsaren (byggt för Safari på iPhone, iPad o
 
 Båda ser sina egna armar, ben och kropp och kompisens kropp i cockpiten. Pilotens händer följer ratten och gasreglagen. Kompisen pekar när navigatören ger en gest och trycker på knappar i taket när navigatören ritar ut rutten.
 
-Flyg genom portarna i rätt ordning, förbi träd, klippor, en kanjon, ett hål i en vägg och en tunnel. En krasch kostar +3 s och en missad port +5 s.
+Flyg genom portarna i rätt ordning, förbi träd, klippor, en kanjon, ett hål i en vägg och en tunnel. En krasch kostar +3 s och en missad port +5 s. Ringarna och stjärnorna kan man alltid flyga igenom. Varje stjärna man tar drar av 1 s från tiden.
+
+## Testvärld med NPC-navigatör
+
+Tryck **🧑‍✈️ Testvärld med NPC-navigatör** på startsidan för att flyga själv med en datorstyrd navigatör i stolen bredvid. Du flyger "blint", och NPC:n ser hela banan. Den letar efter hinder framför planet och säger vart du ska flyga ("Sväng vänster och stig", "Bromsa! Skarpt höger!", "Hinder framför!") med svensk röst och textruta. Samtidigt pekar den åt rätt håll i cockpiten. Rösten slås av och på med **🔊 Röst**. Testvärlden är en öppen äng med breda portar och många stjärnor.
 
 ## Spela
 
@@ -26,9 +30,10 @@ Inget konto behövs. Namn, rekord och historik sparas lokalt i webbläsaren.
 ## Fysik
 
 - Planet svänger genom att banka, som ett riktigt plan (koordinerad sväng). Högre fart ger större svängradie, så det lönar sig att bromsa före skarpa svängar.
+- Lugn och förlåtande styrning: max ca 43° bankning, mjuk dämpad roll utan översväng, och tangenter och spak som ramper upp mjukt.
 - Rollen och tippningen har tröghet, och nosen planar ut av sig själv.
 - Stigning kostar fart och dykning ger fart. I branta svängar tappar planet höjd om man inte drar upp.
-- Lätt turbulens skakar planet.
+- Svag turbulens. Kameran är stabil, med bara små och väl dämpade rörelser i huvud och kropp.
 - Hela planet kan krocka: kroppen, nosen, stjärten och vingspetsarna (13 m vingbredd).
 - Efter en krasch studsar och tumlar planet, och kameran visar det utifrån innan man startar om vid senaste porten.
 - Figurernas överkroppar och huvuden hänger i fjädrar som reagerar på G-krafter, gaspådrag, svängar och skakningar. Armar och ben styrs med invers kinematik (IK).
@@ -74,6 +79,7 @@ js/world3d.js     Banans 3D-värld och ruttprickarna
 js/view3d.js      Kameror: cockpit, bakifrån (nedräkning/krasch), runtom (väntan)
 js/pilot.js       Pilotens vy (fysik + 3D)
 js/nav3d.js       Navigatörens cockpitfönster med mjuk interpolation
+js/npc.js         NPC-navigatören (hinderkoll, kommandon, gester, svensk röst)
 js/radar.js       Navigatörens radar, höjdmätare och ruttplanering
 js/input.js       Tangentbord och styrspak på pekskärm
 js/storage.js     Lokal profil, historik och rekord

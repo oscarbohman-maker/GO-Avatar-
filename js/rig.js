@@ -173,7 +173,7 @@ export class PlaneRig {
 
     // ---- figurer ----
     const accel = V((st.rollAcc || 0) * 1.1, ((st.loadN || 1) - 1) * 9.81, st.accLong || 0);
-    const shake = crashed ? 0.03 : 0.0015 + Math.min(0.006, Math.abs(st.rollAcc || 0) * 0.0002);
+    const shake = crashed ? 0.03 : 0.0003 + Math.min(0.0012, Math.abs(st.rollAcc || 0) * 0.00004);
 
     // Pilot: händerna på ratten, höger hand till gasen när man gasar/bromsar
     const yokeP = this.yokes[0];
@@ -188,7 +188,7 @@ export class PlaneRig {
       hands: pilotHands,
       accel, shake,
       lean: this.pilot.reachDeficit(pilotHands),
-      look: { yaw: pilotLook.yaw - st.roll * 0.12 + (crashed ? 0.3 : 0), pitch: -0.06 + pilotLook.pitch },
+      look: { yaw: pilotLook.yaw + (crashed ? 0.3 : 0), pitch: -0.06 + pilotLook.pitch },
       brace: crashed ? 1 : th < 0 ? 0.6 : 0,
     });
 
