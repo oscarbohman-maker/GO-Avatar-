@@ -33,8 +33,10 @@ export class PlaneRig {
     this.copilot = new Avatar(0.6, AVATAR_STYLES.copilot, 'andrepilot');
     this.cockpit.add(this.pilot.group, this.copilot.group);
 
-    // Förstaperson: det egna huvudet döljs (kameran sitter i det)
+    // Förstaperson: det egna huvudet döljs (kameran sitter strax intill det)
     (localSeat === 'pilot' ? this.pilot : this.copilot).setHeadVisible(false);
+    // Sluten kabin: väggar, tak och bakvägg så att cockpiten ser ut som planet utifrån.
+    this._buildCabinShell();
     // Svag varm kabinlampa
     const cabin = new THREE.PointLight(0xffd6a0, 2.2, 3.2, 2);
     cabin.position.set(0, 1.85, -0.15);
@@ -51,6 +53,50 @@ export class PlaneRig {
   }
 
   _get(n) { return this.cockpit.getObjectByName(n); }
+
+  // Tillägg till cockpitmodellen (originalet i models.js är orört): referensmodellen
+  // har öppna sidor ovanför sidoväggarna och inget tak, men flygplanet utifrån är
+  // slutet. Här fylls sidorna, taket och bakväggen i, med ett tonat sidofönster fram.
+  _buildCabinShell() {
+    const shellMat = this._get('framvagg').material;   // samma vita insida som modellen
+    const glassMat = new THREE.MeshStandardMaterial({ name: 'sidoglas', color: 0x27323f, roughness: 0.15, transparent: true, opacity: 0.6 });
+    const g = new THREE.Group(); g.name = 'kabinskal';
+    // sidopanel i (z, y): från sidoväggens överkant upp till taket, framkanten följer A-stolpen
+    const panel = new THREE.Shape([
+      [-1.2, 1.02], [1.3, 1.02], [1.3, 2.08], [-0.7, 2.08], [-1.2, 1.3],
+    ].map(([z, y]) => new THREE.Vector2(z, y)));
+    // fönsteröppning fram (rundade hörn)
+    const hole = new THREE.Path();
+    const z0 = -0.72, z1 = -0.08, y0 = 1.2, y1 = 1.74, r = 0.08;
+    hole.moveTo(z0 + r, y0); hole.lineTo(z1 - r, y0); hole.quadraticCurveTo(z1, y0, z1, y0 + r);
+    hole.lineTo(z1, y1 - r); hole.quadraticCurveTo(z1, y1, z1 - r, y1); hole.lineTo(z0 + r, y1);
+    hole.quadraticCurveTo(z0, y1, z0, y1 - r); hole.lineTo(z0, y0 + r); hole.quadraticCurveTo(z0, y0, z0 + r, y0);
+    panel.holes.push(hole);
+    const panelGeo = new THREE.ExtrudeGeometry(panel, { depth: 0.06, bevelEnabled: false });
+    panelGeo.rotateY(-Math.PI / 2);   // formens x blir z, extruderingen blir -x
+    const glassShape = new THREE.Shape(hole.getPoints());
+    const glassGeo = new THREE.ShapeGeometry(glassShape);
+    glassGeo.rotateY(-Math.PI / 2);
+    for (const s of [-1, 1]) {
+      const m = new THREE.Mesh(panelGeo, shellMat);
+      m.name = `kabinvagg_${s}`;
+      m.position.x = s > 0 ? 1.13 : -1.07;   // geometrin sträcker sig 0.06 åt -x
+      g.add(m);
+      const gl = new THREE.Mesh(glassGeo, glassMat);
+      gl.name = `sidofonster_${s}`;
+      gl.position.x = s * 1.1;
+      g.add(gl);
+    }
+    // tak och bakvägg
+    const roof = new THREE.Mesh(new THREE.BoxGeometry(2.3, 0.06, 2.0), shellMat);
+    roof.name = 'kabintak'; roof.position.set(0, 2.1, 0.3); g.add(roof);
+    const back = new THREE.Mesh(new THREE.BoxGeometry(2.3, 2.1, 0.06), shellMat);
+    back.name = 'bakvagg'; back.position.set(0, 1.05, 1.3); g.add(back);
+    // lister som täcker skarven mellan tak och vindruteram
+    const trim = new THREE.Mesh(new THREE.BoxGeometry(2.25, 0.08, 0.12), shellMat);
+    trim.name = 'taklist'; trim.position.set(0, 2.06, -0.72); g.add(trim);
+    this.cockpit.add(g);
+  }
 
   // Skapar vridpunkter så att visare, svep och horisont kan röra sig
   _pivotNeedle(gaugeName) {
@@ -250,21 +296,22 @@ export class PlaneRig {
     });
   }
 
-  // Cockpitkamerans position och riktning i världen: förstaperson från den egna
-  // figurens huvud (som döljs), en bit bakåt och lätt vriden mot kompisen så att
-  // den syns med den höga FOV:n. Riktningen följer planet, inte huvudets gung,
-  // så kameran är stabil. look = { yaw, pitch } för att titta runt (Q/E eller dra).
+  // Cockpitkamerans position och riktning i världen: förstaperson i huvudhöjd,
+  // men flyttad in mot planets mitt (mellan den egna stolen och mittkonsolen)
+  // och en bit bakåt, så att man ser både sig själv och kompisen med den höga FOV:n.
+  // Riktningen följer planet, inte huvudets gung, så kameran är stabil.
+  // look = { yaw, pitch } för att titta runt (Q/E eller dra).
   eyePose(seat, outPos, outQuat, look) {
     this.root.updateMatrixWorld(true);
     const av = seat === 'copilot' ? this.copilot : this.pilot;
-    const toFriend = seat === 'copilot' ? 1 : -1;     // + = åt höger i cockpiten
-    outPos.copy(av.eye).add(V(toFriend * 0.04, 0.03, 0.2));
+    const toFriend = seat === 'copilot' ? -1 : 1;     // riktning (x) mot kompisen
+    outPos.copy(av.eye).add(V(toFriend * 0.32, 0.03, 0.2));
     this.cockpit.localToWorld(outPos);
     this.cockpit.getWorldQuaternion(outQuat);
     const ly = look ? look.yaw : 0, lp = look ? look.pitch : 0;
     this._eyeQ = this._eyeQ || new THREE.Quaternion();
-    // positiv yaw = vänster, så piloten (vänster stol) vrids lite åt höger
-    this._eyeQ.setFromEuler(new THREE.Euler(-0.1 + lp, -toFriend * 0.2 + ly, 0, 'YXZ'));
+    // positiv yaw = vänster; vrid en aning mot kompisen
+    this._eyeQ.setFromEuler(new THREE.Euler(-0.1 + lp, -toFriend * 0.08 + ly, 0, 'YXZ'));
     outQuat.multiply(this._eyeQ);
   }
 
