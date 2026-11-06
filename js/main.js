@@ -7,6 +7,7 @@ import { MAPS, LEVEL_INFO, buildLevel } from './levels.js';
 import { sfx, unlockAudio, setSfxEnabled } from './sfx.js';
 import { NpcNavigator, NpcVoice } from './npc.js';
 import { icon, applyIcons, setIconLabel } from './icons.js';
+import { POINTS } from './sim.js';
 
 const $ = (s, r = document) => r.querySelector(s);
 const $$ = (s, r = document) => Array.from(r.querySelectorAll(s));
@@ -523,8 +524,17 @@ function flash(text, cls = '', ms = 1100, html = false) {
   if (ms) flashTimer = setTimeout(() => { el.className = 'center-msg'; }, ms);
 }
 
-function bumpScore() {
-  $$('.hud-item.score').forEach((el) => { el.classList.remove('bump'); void el.offsetWidth; el.classList.add('bump'); });
+// HUD:ens poäng studsar och ett flytande "+poäng" stiger upp
+function bumpScore(pts, gold) {
+  $$('.hud-item.score').forEach((el) => {
+    el.classList.remove('bump'); void el.offsetWidth; el.classList.add('bump');
+    if (!pts || !el.offsetParent) return;
+    const f = document.createElement('span');
+    f.className = 'score-float' + (gold ? ' gold' : '');
+    f.textContent = '+' + pts;
+    el.appendChild(f);
+    setTimeout(() => f.remove(), 1100);
+  });
 }
 
 function handleEvent(e) {
@@ -536,7 +546,7 @@ function handleEvent(e) {
       if (!e.finished) {
         if (e.perfect) { flash(`PERFECT! <small>+${e.bonus} points</small>`, 'gold', 900, true); sfx.perfect(); }
         else { flash(`Gate ${e.gate + 1} ✓ <small>+${e.bonus} points</small>`, 'good', 800, true); sfx.gate(); }
-        bumpScore();
+        bumpScore(e.bonus, e.perfect);
       }
       break;
     case 'miss': flash(`Missed gate ${e.gate + 1}! <small>+${g.level.penalties.miss} s</small>`, 'bad', 1300, true); sfx.miss(); break;
@@ -548,7 +558,7 @@ function handleEvent(e) {
     case 'star':
       flash(`⭐ ${e.count}/${e.total} <small>+${e.points} points</small>`, 'gold', 700, true);
       sfx.star();
-      bumpScore();
+      bumpScore(e.points, false);
       if (g.onStar) g.onStar(e.idx);
       break;
     case 'finish': sfx.finish(); showResults(e); break;
@@ -836,38 +846,97 @@ function updateGuide(root, rv) {
 }
 
 // Poängen räknas upp med en mjuk animation
-function countUp(el, to, ms = 900) {
-  const t0 = performance.now();
+function countUp(el, to, ms = 900, delay = 0, prefix = '') {
+  const t0 = performance.now() + delay;
+  el.textContent = prefix + '0';
   const tick = (now) => {
-    const k = Math.min(1, (now - t0) / ms);
-    el.textContent = String(Math.round(to * (1 - Math.pow(1 - k, 3))));
+    const k = Math.max(0, Math.min(1, (now - t0) / ms));
+    el.textContent = prefix + String(Math.round(to * (1 - Math.pow(1 - k, 3))));
     if (k < 1) requestAnimationFrame(tick);
   };
   requestAnimationFrame(tick);
 }
 
+// Betyg utifrån hur stor del av maxpoängen man tog
+function rating(level, score) {
+  const max = level.gates.length * POINTS.perfect + (level.stars ? level.stars.length : 0) * POINTS.star + (level.par || 60) * POINTS.timeBonusPerSec * 0.5;
+  const r = score / max;
+  const letter = r >= 0.85 ? 'S' : r >= 0.7 ? 'A' : r >= 0.55 ? 'B' : r >= 0.4 ? 'C' : 'D';
+  const stars = r >= 0.85 ? 3 : r >= 0.65 ? 2 : r >= 0.4 ? 1 : 0;
+  return { letter, stars };
+}
+
+// Konfetti vid nytt rekord (enkla DOM-bitar med CSS-animation)
+function confetti(box) {
+  box.innerHTML = '';
+  const cols = ['#ffd23f', '#4a93f5', '#3ddc84', '#ff7b7b', '#ffffff'];
+  for (let i = 0; i < 60; i++) {
+    const c = document.createElement('i');
+    c.style.left = Math.random() * 100 + '%';
+    c.style.background = cols[i % cols.length];
+    c.style.setProperty('--dx', (Math.random() * 160 - 80) + 'px');
+    c.style.setProperty('--rot', (Math.random() * 720 - 360) + 'deg');
+    c.style.animationDelay = (0.6 + Math.random() * 0.6) + 's';
+    c.style.animationDuration = (1.6 + Math.random() * 1.2) + 's';
+    box.appendChild(c);
+  }
+}
+
 function showResults(e) {
   const g = app.game;
   if (!g) return;
-  const role = g.role;
+  const role = g.role, L = g.level;
   const score = e.score || 0;
   const partner = app.mode === 'npc' ? 'NPC' : app.mode === 'navai' ? 'AI pilot' : app.mode === 'solo' ? null : app.friendName;
+  const prevBest = Store.profile.best[L.id];
+  const prevScore = prevBest && prevBest.score != null ? prevBest.score : 0;
   const isRecord = Store.addResult({
-    level: g.level.id, time: Math.round(e.time * 10) / 10, score, crashes: e.crashes, misses: e.misses, stars: e.stars || 0,
+    level: L.id, time: Math.round(e.time * 10) / 10, score, crashes: e.crashes, misses: e.misses, stars: e.stars || 0,
     role, partner, solo: isSolo(),
   });
   const res = $('#results');
-  $('.res-title', res).textContent = e.crashes ? `Finished! (attempt ${e.crashes + 1})` : 'Finished – first try!';
-  countUp($('.res-score', res), score);
-  $('.res-time', res).textContent = e.time.toFixed(1) + ' s';
-  $('.res-stars', res).textContent = `${e.stars || 0}/${e.totalStars || 0}`;
-  $('.res-perfect', res).textContent = String(e.perfects || 0);
-  $('.res-tbonus', res).textContent = '+' + (e.timeBonus || 0);
-  $('.res-details', res).textContent = e.misses ? `${e.misses} missed gate${e.misses > 1 ? 's' : ''}` : '';
-  $('.res-record', res).textContent = isRecord ? '🏆 New record!' : '';
+  const rt = rating(L, score);
+  const map = MAPS.find((m) => m.id === L.id);
+  $('.res-title', res).textContent = e.crashes ? 'Finished!' : 'Flawless run!';
+  $('.res-map', res).textContent = map ? `Map ${map.n} · ${map.name}` : L.name;
+  $('.rank-letter', res).textContent = rt.letter;
+  $('.rank', res).className = 'rank rank-' + rt.letter;
+  $$('.rstar', res).forEach((el, i) => { el.classList.toggle('on', i < rt.stars); el.style.animationDelay = (0.45 + i * 0.18) + 's'; });
+  countUp($('.res-score', res), score, 1200, 250);
+  $('.res-record-badge', res).classList.toggle('hidden', !isRecord);
+
+  // jämförelse med tidigare rekord
+  const top = Math.max(score, prevScore, 1);
+  $('.best-fill', res).style.setProperty('--w', (score / top * 100) + '%');
+  $('.best-mark', res).style.left = (prevScore / top * 100) + '%';
+  $('.best-mark', res).classList.toggle('hidden', !prevScore);
+  $('.best-text', res).textContent = !prevScore ? 'First result on this map!'
+    : isRecord ? `Beat your best by ${score - prevScore} points` : `Best: ${prevScore} points · ${prevScore - score} to go`;
+
+  // poänguppdelning
+  const passed = L.gates.length - (e.misses || 0);
+  const perf = e.perfects || 0;
+  const rows = [
+    { ic: 'target', name: 'Gates', count: `${passed - perf}×`, pts: (passed - perf) * POINTS.gate },
+    { ic: 'zap', name: 'Perfect', count: `${perf}×`, pts: perf * POINTS.perfect, gold: true },
+    { ic: 'star', name: 'Stars', count: `${e.stars || 0}/${e.totalStars || 0}`, pts: (e.stars || 0) * POINTS.star },
+    { ic: 'clock', name: 'Time bonus', count: e.time.toFixed(1) + ' s', pts: e.timeBonus || 0 },
+  ];
+  const ul = $('.res-breakdown', res);
+  ul.innerHTML = rows.map((r, i) => `<li style="animation-delay:${0.35 + i * 0.1}s" class="${r.gold ? 'gold' : ''}">`
+    + `<span class="bd-ic">${icon(r.ic)}</span><span class="bd-name">${r.name}</span><span class="bd-count">${esc(r.count)}</span><b class="bd-pts">+0</b></li>`).join('');
+  $$('.bd-pts', ul).forEach((el, i) => countUp(el, rows[i].pts, 700, 450 + i * 100, '+'));
+
+  const chips = [];
+  chips.push(`<span class="chip">${icon('restart')} ${e.crashes ? `${e.crashes + 1} attempts` : 'First try'}</span>`);
+  if (e.misses) chips.push(`<span class="chip bad">${icon('close')} ${e.misses} missed</span>`);
+  if (partner) chips.push(`<span class="chip">${icon('users')} with ${esc(partner)}</span>`);
+  $('.res-chips', res).innerHTML = chips.join('');
+
   res.classList.remove('hidden');
   const panel = $('.panel', res);
-  panel.style.animation = 'none'; void panel.offsetWidth; panel.style.animation = '';
+  panel.classList.remove('play'); void panel.offsetWidth; panel.classList.add('play');
+  if (isRecord && prevScore) confetti($('.confetti', res)); else $('.confetti', res).innerHTML = '';
 }
 
 function endGame() {

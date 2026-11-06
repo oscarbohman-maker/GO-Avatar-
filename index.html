@@ -219,20 +219,34 @@
     </div>
 
     <div id="results" class="overlay hidden">
-      <div class="panel pop">
-        <h2 class="res-title">Finished!</h2>
-        <div class="res-score">0</div>
-        <div class="res-label">points</div>
-        <div class="res-grid">
-          <div><small data-icon="clock">Time</small><b class="res-time">0.0 s</b></div>
-          <div><small data-icon="star">Stars</small><b class="res-stars">0</b></div>
-          <div><small data-icon="target">Perfect gates</small><b class="res-perfect">0</b></div>
-          <div><small data-icon="zap">Time bonus</small><b class="res-tbonus">0</b></div>
+      <div class="panel res-panel pop">
+        <div class="res-glow" aria-hidden="true"></div>
+        <div class="confetti" aria-hidden="true"></div>
+        <div class="res-head">
+          <div class="rank"><span class="rank-letter">S</span></div>
+          <div class="res-head-text">
+            <h2 class="res-title">Finished!</h2>
+            <div class="res-map"></div>
+            <div class="res-stars-row" aria-label="Rating">
+              <span class="rstar" data-icon="star"></span><span class="rstar" data-icon="star"></span><span class="rstar" data-icon="star"></span>
+            </div>
+          </div>
         </div>
-        <div class="res-details"></div>
-        <div class="res-record"></div>
-        <button id="btn-again" class="btn primary big" data-sfx data-icon="restart">Fly again</button>
-        <button id="btn-res-lobby" class="btn secondary" data-sfx>Menu</button>
+        <div class="res-score-box">
+          <div class="res-score">0</div>
+          <div class="res-label">points</div>
+          <div class="res-record-badge hidden" data-icon="award">New record!</div>
+        </div>
+        <div class="res-best">
+          <div class="best-bar"><div class="best-fill"></div><div class="best-mark"></div></div>
+          <div class="best-text"></div>
+        </div>
+        <ul class="res-breakdown"></ul>
+        <div class="res-chips"></div>
+        <div class="res-actions">
+          <button id="btn-res-lobby" class="btn secondary big" data-sfx data-icon="back">Menu</button>
+          <button id="btn-again" class="btn primary big shine" data-sfx data-icon="restart">Fly again</button>
+        </div>
       </div>
     </div>
   </section>
