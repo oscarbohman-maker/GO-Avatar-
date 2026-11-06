@@ -543,9 +543,11 @@ function handleEvent(e) {
   switch (e.kind) {
     case 'go': flash('GO!', 'good big', 700); sfx.go(); break;
     case 'pass':
+      if (g.gateBurst) g.gateBurst(e);
       if (!e.finished) {
-        if (e.perfect) { flash(`PERFECT! <small>+${e.bonus} points</small>`, 'gold', 900, true); sfx.perfect(); }
-        else { flash(`Gate ${e.gate + 1} ✓ <small>+${e.bonus} points</small>`, 'good', 800, true); sfx.gate(); }
+        rewardPopup(e);
+        if (e.perfect) sfx.perfect(); else sfx.gate(e.combo || 1);
+        if (e.mult > 1 && comboMultPrev(e) < e.mult) sfx.combo();
         bumpScore(e.bonus, e.perfect);
       }
       break;
@@ -565,7 +567,55 @@ function handleEvent(e) {
   }
 }
 
+// ---- belöningar --------------------------------------------------------
+const COMBO_STEPS = [[8, 3], [5, 2], [3, 1.5]];
+const multOf = (c) => { for (const [n, m] of COMBO_STEPS) if (c >= n) return m; return 1; };
+const comboMultPrev = (e) => multOf((e.combo || 1) - 1);
+const PRAISE = ['Nice!', 'Great!', 'Sweet!', 'Clean!', 'Smooth!'];
+const COMBO_WORDS = { 1.5: 'COMBO', 2: 'SUPER COMBO', 3: 'MEGA COMBO' };
+
+// Stort färgglatt kort mitt på skärmen + blixt i skärmkanterna
+function rewardPopup(e) {
+  const g = app.game;
+  if (!g) return;
+  const root = g.role === 'pilot' ? $('#pilot-ui') : $('#nav-ui');
+  const pop = $('.reward', root), edge = $('.edge-flash', root);
+  const tier = e.perfect ? 'perfect' : e.mult >= 2 ? 'combo' : e.mult > 1 ? 'streak' : 'gate';
+  const levelUp = e.mult > 1 && comboMultPrev(e) < e.mult;
+  const title = e.perfect ? 'PERFECT!' : levelUp ? COMBO_WORDS[e.mult] + '!' : PRAISE[(e.gate || 0) % PRAISE.length];
+  $('.rw-title', pop).textContent = title;
+  $('.rw-pts', pop).textContent = '+' + e.bonus;
+  const chip = $('.rw-mult', pop);
+  chip.textContent = '×' + e.mult;
+  chip.classList.toggle('hidden', !(e.mult > 1));
+  $('.rw-streak', pop).textContent = (e.combo || 1) >= 2 ? `${e.combo} in a row` : `Gate ${e.gate + 1}`;
+  pop.className = 'reward show tier-' + tier + (levelUp ? ' level-up' : '');
+  void pop.offsetWidth;
+  pop.classList.add('anim');
+  edge.className = 'edge-flash tier-' + tier;
+  void edge.offsetWidth;
+  edge.classList.add('anim');
+  clearTimeout(g._rwT);
+  g._rwT = setTimeout(() => { pop.className = 'reward'; }, levelUp ? 1500 : 1100);
+}
+
+function updateCombo(root, snap) {
+  const el = $('.combo-meter', root);
+  if (!el) return;
+  const c = snap.ph === 'fly' || snap.ph === 'finished' ? (snap.cb || 0) : 0;
+  const m = multOf(c);
+  el.classList.toggle('on', c >= 2);
+  el.dataset.m = String(m);
+  $('.cm-mult', el).textContent = '×' + m;
+  $('.cm-count', el).textContent = c + ' in a row';
+  // framsteg mot nästa nivå
+  const next = c >= 8 ? null : c >= 5 ? 8 : c >= 3 ? 5 : 3;
+  const prev = c >= 8 ? 8 : c >= 5 ? 5 : c >= 3 ? 3 : 0;
+  $('.cm-fill', el).style.width = (next ? ((c - prev) / (next - prev)) * 100 : 100) + '%';
+}
+
 function updateHud(root, snap, level) {
+  updateCombo(root, snap);
   const total = level.gates.length;
   $$('.hud-time', root).forEach((el) => { el.textContent = snap.tm.toFixed(1); });
   $$('.hud-gate', root).forEach((el) => { el.textContent = Math.min(snap.ng + 1, total) + '/' + total; });
@@ -623,6 +673,7 @@ async function startGame() {
       setRoute: (pts) => pv.setRoute(pts),
       onStar: (idx) => { pv.view.world.setStarCollected(idx); if (minimap) minimap.collected.add(idx); },
       onCrash: (e) => pv.view.onCrash(e),
+      gateBurst: (e) => pv.view.gateBurst(e),
       onRespawn: () => {
         // ny runda från starten: stjärnorna kommer tillbaka, planet blir helt igen
         pv.view.world.resetStars();
@@ -745,6 +796,7 @@ async function startGame() {
         view.view.world.setStarCollected(idx);
       },
       onCrash: (e) => view.view.onCrash(e),
+      gateBurst: (e) => view.view.gateBurst(e),
       onRespawn: () => {
         mini.resetTrail();
         view.view.world.resetStars();
@@ -859,7 +911,10 @@ function countUp(el, to, ms = 900, delay = 0, prefix = '') {
 
 // Betyg utifrån hur stor del av maxpoängen man tog
 function rating(level, score) {
-  const max = level.gates.length * POINTS.perfect + (level.stars ? level.stars.length : 0) * POINTS.star + (level.par || 60) * POINTS.timeBonusPerSec * 0.5;
+  // max: alla ringar perfekt med full combo, alla stjärnor och halva möjliga tidsbonusen
+  let gateMax = 0;
+  for (let c = 1; c <= level.gates.length; c++) gateMax += Math.round(POINTS.perfect * multOf(c));
+  const max = gateMax + (level.stars ? level.stars.length : 0) * POINTS.star + (level.par || 60) * POINTS.timeBonusPerSec * 0.5;
   const r = score / max;
   const letter = r >= 0.85 ? 'S' : r >= 0.7 ? 'A' : r >= 0.55 ? 'B' : r >= 0.4 ? 'C' : 'D';
   const stars = r >= 0.85 ? 3 : r >= 0.65 ? 2 : r >= 0.4 ? 1 : 0;
@@ -918,12 +973,13 @@ function showResults(e) {
   const perf = e.perfects || 0;
   const rows = [
     { ic: 'target', name: 'Gates', count: `${passed - perf}×`, pts: (passed - perf) * POINTS.gate },
-    { ic: 'zap', name: 'Perfect', count: `${perf}×`, pts: perf * POINTS.perfect, gold: true },
+    { ic: 'award', name: 'Perfect', count: `${perf}×`, pts: perf * POINTS.perfect, gold: true },
+    { ic: 'zap', name: 'Combo bonus', count: `best ${e.bestCombo || 0}`, pts: e.comboBonus || 0, hot: true },
     { ic: 'star', name: 'Stars', count: `${e.stars || 0}/${e.totalStars || 0}`, pts: (e.stars || 0) * POINTS.star },
     { ic: 'clock', name: 'Time bonus', count: e.time.toFixed(1) + ' s', pts: e.timeBonus || 0 },
   ];
   const ul = $('.res-breakdown', res);
-  ul.innerHTML = rows.map((r, i) => `<li style="animation-delay:${0.35 + i * 0.1}s" class="${r.gold ? 'gold' : ''}">`
+  ul.innerHTML = rows.map((r, i) => `<li style="animation-delay:${0.35 + i * 0.1}s" class="${r.gold ? 'gold' : r.hot ? 'hot' : ''}">`
     + `<span class="bd-ic">${icon(r.ic)}</span><span class="bd-name">${r.name}</span><span class="bd-count">${esc(r.count)}</span><b class="bd-pts">+0</b></li>`).join('');
   $$('.bd-pts', ul).forEach((el, i) => countUp(el, rows[i].pts, 700, 450 + i * 100, '+'));
 
@@ -990,4 +1046,4 @@ initGameMenu();
 applyTouchSetting();
 
 // För automatiska tester
-window.__blindflyg = { app, startSolo };
+window.__blindflyg = { app, startSolo, rewardPopup, updateCombo };

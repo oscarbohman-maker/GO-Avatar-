@@ -231,5 +231,24 @@ test('passera utanför ringen = missad port', () => {
   assert.equal(gateCrossing(g, [g.x + n[0], g.y, g.z + n[2]], [g.x - n[0], g.y, g.z - n[2]]), null);
 });
 
+test('combo: ringar i rad höjer multiplikatorn, miss nollställer', () => {
+  const sess = new FlightSession(test1);
+  const g = test1.gates;
+  const events = [];
+  sess.onEvent = (e) => events.push(e);
+  sess.phase = 'fly';
+  // flyg rakt genom portarnas mittpunkter en i taget
+  for (let i = 0; i < 6; i++) {
+    const n = forward(g[i].yaw);
+    Object.assign(sess.plane, { x: g[i].x - n[0] * 10, y: g[i].y, z: g[i].z - n[2] * 10, yaw: g[i].yaw, pitch: 0, roll: 0, rollRate: 0, pitchRate: 0 });
+    sess.grace = 5;
+    for (let k = 0; k < 30 && sess.nextGate === i; k++) sess.step({ x: 0, y: 0 });
+  }
+  const passes = events.filter((e) => e.kind === 'pass');
+  assert.deepEqual(passes.map((e) => e.mult), [1, 1, 1.5, 1.5, 2, 2]);
+  assert.equal(passes[4].bonus, POINTS.perfect * 2);
+  assert.ok(sess.comboBonus > 0);
+});
+
 if (failures) { console.log(`\n${failures} test misslyckades`); process.exit(1); }
 console.log('\nAlla test gick igenom');

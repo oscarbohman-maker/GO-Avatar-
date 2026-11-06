@@ -20,6 +20,7 @@ Båda figurerna syns i cockpiten. Pilotens händer följer ratten och gasreglage
 
 - Flyg genom ringarna i ordning. Man kan alltid flyga igenom ringar och stjärnor.
 - **Poäng:** ring +100, **Perfect** (inom 40 % av ringens radie) +250, stjärna +50. I mål får man en tidsbonus på 25 poäng per sekund under banans par-tid.
+- **Combo:** ringar i rad utan miss eller krasch höjer ringpoängen: 3 i rad ×1,5, 5 i rad ×2 och 8 i rad ×3. Varje ring ger ett färgglatt pop-up-kort (blått för vanlig ring, guld för Perfect, grönt och lila för combo) och en kantblixt, och ringen skjuter ut en ljusvåg i 3D. Tonen stiger för varje ring i rad, och en combo-mätare i HUD:en visar hur nära nästa nivå man är.
 - **Kraschar man börjar man om från starten.** Planet tumlar först, sedan nollställs portar, stjärnor, poäng och tid.
 - **Kraschen beror på vad man träffar:** mark ger eldklot, brand och brännmärke. En klippa eller kanjonvägg ger en kraftig smäll med stoft och stenskärvor. Ett träd får löv och grenar att yra, och ger lite rök och en liten explosion. En vägg eller tunnel ger betongdamm, gnistor, brand och väggbitar som faller ned. Effekten startar vid kontaktpunkten, och skräpet flyger i fartens riktning. Den del som träffar (vinge, nos, stjärt) lossnar, och vid en hård frontal träff slås hela planet sönder. Storlek, ljusblixt och kameraskak skalas med fart och träffvinkel.
 - Missad port: +5 s på tiden.

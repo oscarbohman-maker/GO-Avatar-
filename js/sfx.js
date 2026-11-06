@@ -37,7 +37,12 @@ export const sfx = {
   perfect() { [990, 1320, 1760].forEach((f, i) => tone(f, 0.14, 'triangle', 0.12, i * 0.06)); },
   click() { tone(520, 0.05, 'sine', 0.06); },
   star() { tone(1320, 0.08, 'triangle', 0.12); tone(1760, 0.12, 'triangle', 0.1, 0.06); },
-  gate() { tone(880, 0.1, 'sine', 0.15); tone(1320, 0.15, 'sine', 0.12, 0.08); },
+  gate(combo = 1) {
+    const up = Math.pow(1.06, Math.min(12, combo - 1));        // tonen stiger för varje ring i rad
+    tone(880 * up, 0.1, 'sine', 0.15); tone(1320 * up, 0.15, 'sine', 0.12, 0.08);
+    if (combo >= 3) tone(1760 * up, 0.18, 'triangle', 0.08, 0.16);
+  },
+  combo() { [784, 988, 1175, 1568].forEach((f, i) => tone(f, 0.16, 'square', 0.07, i * 0.07)); },
   miss() { tone(300, 0.25, 'sawtooth', 0.08); },
   crash() { tone(200, 0.5, 'sawtooth', 0.15, 0, 40); },
   finish() { [660, 880, 1100, 1320].forEach((f, i) => tone(f, 0.25, 'triangle', 0.12, i * 0.12)); },

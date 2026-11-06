@@ -143,6 +143,31 @@ export class World3D {
     this.routeMesh = null;
   }
 
+  // Belöning när man flyger igenom en ring: ringen blinkar och en ljusvåg växer ut från den
+  gateBurst(idx, perfect, combo = 1) {
+    const g = this.level.gates[idx], mesh = this.gateMeshes[idx];
+    if (!g || !mesh) return;
+    if (!this._burstGeo) {
+      this._burstGeo = new THREE.TorusGeometry(1, 0.06, 8, 48);
+      this._bursts = [0, 1, 2, 3, 4, 5].map(() => {
+        const m = new THREE.Mesh(this._burstGeo, new THREE.MeshBasicMaterial({ transparent: true, depthWrite: false, blending: THREE.AdditiveBlending, fog: false }));
+        m.visible = false; this.scene.add(m); return m;
+      });
+      this._burstIdx = 0;
+    }
+    const col = perfect ? 0xffc22e : combo >= 3 ? 0xff4fd8 : 0x3ddcff;
+    const waves = perfect ? 3 : 2;
+    for (let i = 0; i < waves; i++) {
+      const b = this._bursts[this._burstIdx++ % this._bursts.length];
+      b.position.set(g.x, g.y, g.z); b.rotation.set(0, g.yaw, 0);
+      b.material.color.setHex(col); b.material.opacity = 1;
+      b.userData = { t: -i * 0.09, r: g.r, life: 0.7 };
+      b.scale.setScalar(g.r); b.visible = true;
+    }
+    mesh.userData.flash = 1;
+    mesh.userData.flashCol = col;
+  }
+
   updateGates(ng) {
     if (ng === this._shownGate) return;
     this._shownGate = ng;
@@ -183,6 +208,24 @@ export class World3D {
 
   animate(dt) {
     this.time += dt;
+    if (this._bursts) for (const b of this._bursts) {
+      if (!b.visible) continue;
+      const u = b.userData; u.t += dt;
+      if (u.t < 0) { b.material.opacity = 0; continue; }
+      const k = u.t / u.life;
+      if (k >= 1) { b.visible = false; continue; }
+      b.scale.setScalar(u.r * (1 + k * 2.2));
+      b.material.opacity = Math.pow(1 - k, 1.5);
+    }
+    this.gateMeshes.forEach((m) => {
+      const f = m.userData.flash;
+      if (!f) return;
+      m.userData.flash = Math.max(0, f - dt * 2.5);
+      m.scale.setScalar(1 + 0.25 * m.userData.flash);
+      m.material.emissive.setHex(m.userData.flashCol);
+      m.material.emissiveIntensity = 1.5 * m.userData.flash;
+      if (!m.userData.flash) { m.scale.setScalar(1); this._shownGate = -1; }   // tillbaka till vanlig färg
+    });
     this.starMeshes.forEach((m, i) => {
       m.rotation.y = this.time * 2 + i;
       m.children[0].position.y = Math.sin(this.time * 2.5 + i) * 0.4;

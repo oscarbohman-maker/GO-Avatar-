@@ -22,7 +22,9 @@ const COUNTDOWN = 3;
 const GRAV = 22;
 // Poäng: ringar ger mest, och ännu mer om man träffar mitten ("Perfect!").
 export const POINTS = { gate: 100, perfect: 250, star: 50, timeBonusPerSec: 25 };
-export const PERFECT_FRACTION = 0.4;   // inom 40 % av ringens radie = "Perfect!"
+export const PERFECT_FRACTION = 0.4;
+// Combo: ringar i rad utan miss eller krasch ger en multiplikator på ringpoängen
+export function comboMult(combo) { return combo >= 8 ? 3 : combo >= 5 ? 2 : combo >= 3 ? 1.5 : 1; }   // inom 40 % av ringens radie = "Perfect!"
 // Tidsbonus i mål: 25 poäng för varje sekund under banans "par"-tid
 export function timeBonus(level, time) { return Math.max(0, Math.round(((level.par || 60) - time) * POINTS.timeBonusPerSec)); }
 
@@ -55,6 +57,9 @@ export class FlightSession {
     this.misses = 0;
     this.points = 0;          // poäng under rundan (ringar + stjärnor)
     this.perfects = 0;
+    this.combo = 0;           // ringar i rad
+    this.comboBonus = 0;      // extrapoäng från multiplikatorn
+    this.bestCombo = 0;
     this.tumble = null;
     this.stars = new Set();
     this.grace = GRACE;
@@ -141,7 +146,8 @@ export class FlightSession {
     const cross = gateCrossing(g, p0, p1);
     if (cross === 'pass' || cross === 'miss') {
       let bonus = 0, perfect = false;
-      if (cross === 'miss') { this.misses++; this.penalty += this.level.penalties.miss; }
+      let mult = 1;
+      if (cross === 'miss') { this.misses++; this.penalty += this.level.penalties.miss; this.combo = 0; }
       else {
         // hur nära mitten passerade vi? (vid skärningen med portens plan)
         const a = gateLocal(g, p0[0], p0[1], p0[2]).s, b = gateLocal(g, p1[0], p1[1], p1[2]).s;
@@ -149,13 +155,18 @@ export class FlightSession {
         const q = [p0[0] + (p1[0] - p0[0]) * k, p0[1] + (p1[1] - p0[1]) * k, p0[2] + (p1[2] - p0[2]) * k];
         const radial = gateLocal(g, q[0], q[1], q[2]).radial;
         perfect = radial < g.r * PERFECT_FRACTION;
-        bonus = perfect ? POINTS.perfect : POINTS.gate;
+        this.combo++;
+        mult = comboMult(this.combo);
+        const base = perfect ? POINTS.perfect : POINTS.gate;
+        bonus = Math.round(base * mult);
+        this.comboBonus += bonus - base;
+        this.bestCombo = Math.max(this.bestCombo, this.combo);
         if (perfect) this.perfects++;
         this.points += bonus;
       }
       this.nextGate++;
       const finished = this.nextGate >= this.level.gates.length;
-      this.onEvent({ kind: cross, gate: g.idx, finished, bonus, perfect });
+      this.onEvent({ kind: cross, gate: g.idx, finished, bonus, perfect, combo: this.combo, mult });
       if (finished) {
         this.phase = 'finished';
         const tb = timeBonus(this.level, this.time);
@@ -163,6 +174,7 @@ export class FlightSession {
         this.onEvent({
           kind: 'finish', time: this.time, crashes: this.crashes, misses: this.misses,
           stars: this.stars.size, totalStars: stars.length, perfects: this.perfects,
+          comboBonus: this.comboBonus, bestCombo: this.bestCombo,
           timeBonus: tb, score: this.points,
         });
         return;
@@ -198,7 +210,7 @@ export class FlightSession {
     return {
       t: 'st', x: r(p.x), y: r(p.y), z: r(p.z), yw: r(p.yaw, 1000), pt: r(p.pitch, 1000), rl: r(p.roll, 1000),
       sp: r(p.speed, 10), ng: this.nextGate, tm: r(this.time, 10), cr: this.crashes, ms: this.misses,
-      ph: this.phase, cd: r(this.countdown, 10), sc: this.stars.size, pts: this.points,
+      ph: this.phase, cd: r(this.countdown, 10), sc: this.stars.size, pts: this.points, cb: this.combo,
       // för kroppar, rattar och instrument hos navigatören
       ix: r(p.ix), iy: r(p.iy), th: p.throttle, ln: r(p.loadN), al: r(p.accLong, 10), ra: r(p.rollAcc, 10),
     };

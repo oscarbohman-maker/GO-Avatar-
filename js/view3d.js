@@ -53,6 +53,8 @@ export class View3D {
   gesture(kind) { this.rig.gesture(kind); }
 
   // Kraschen anpassas efter vad som träffades, var, med vilken del och hur hårt
+  gateBurst(e) { this.world.gateBurst(e.gate, e.perfect, e.combo); }
+
   onCrash(e) {
     if (!e || !e.pos) return;
     const d = V(...(e.dir || [0, 0, -1])); d.y = 0;
