@@ -3,6 +3,7 @@
 import * as THREE from './lib/three.module.min.js';
 import { World3D } from './world3d.js';
 import { PlaneRig } from './rig.js';
+import { CrashFX } from './crashfx.js';
 
 const V = (x = 0, y = 0, z = 0) => new THREE.Vector3(x, y, z);
 const smooth = (t) => t * t * (3 - 2 * t);
@@ -26,6 +27,9 @@ export class View3D {
     this.denseFog = this.seat === 'pilot';   // navigatören ser genom dimman
     this.rig = new PlaneRig(this.seat);
     this.world.scene.add(this.rig.root);
+    this.fx = new CrashFX(this.world.scene);   // kraschens effekter (bara när planet nuddar något)
+    this.crash = null;
+    this._shake = V();
     this.camera = new THREE.PerspectiveCamera(70, 1, 0.04, this.world.maxFar + 20);
     this.blend = 0;          // 0 = utifrån, 1 = cockpit
     this.orbitA = 0;
@@ -47,6 +51,23 @@ export class View3D {
   }
 
   gesture(kind) { this.rig.gesture(kind); }
+
+  // Kraschen anpassas efter vad som träffades, var, med vilken del och hur hårt
+  onCrash(e) {
+    if (!e || !e.pos) return;
+    const d = V(...(e.dir || [0, 0, -1])); d.y = 0;
+    if (d.lengthSq() < 1e-6) d.set(0, 0, -1);
+    this.crash = { pos: V(...e.pos), sev: e.sev || 1, t: 0, dir: d.normalize() };
+    this.fx.burst(e);
+    this.rig.breakApart(e, this.fx);
+  }
+
+  // Ny runda: delarna tillbaka, skrot och brännmärke bort
+  onRespawn() {
+    this.crash = null;
+    this.fx.clearWreck();
+    this.rig.restoreParts();
+  }
   setRoute(pts) { this.world.setRoute(pts); }
 
   // st: planets tillstånd + phase, countdown (cd), nextGate (ng)
@@ -56,6 +77,11 @@ export class View3D {
     rig.update(dt, st, this.seat === 'pilot' ? { pilotLook: look } : { copilotLook: look });
     this.world.updateGates(st.ng || 0);
     this.world.animate(dt);
+    this.fx.update(dt);
+    if (st.phase === 'crashed' && this.crash) {
+      this.crash.t += dt;
+      this.fx.trail(V(st.x, st.y, st.z), this.crash.sev);    // vraket ryker och brinner medan det tumlar
+    }
 
     // Vilken kameraposition vill vi ha?
     let target;
@@ -85,6 +111,14 @@ export class View3D {
       this.chasePos.lerp(want, Math.min(1, dt * (st.phase === 'crashed' ? 1.5 : 5)));
       outPos = this.chasePos;
       outLook = planeP.clone().add(V(-Math.sin(this.chaseYaw) * 6, 1, -Math.cos(this.chaseYaw) * 6));
+      // efter smällen: kameran glider till en plats bakom och ovanför kontaktpunkten och följer den
+      if (st.phase === 'crashed' && this.crash) {
+        const C = this.crash;
+        const want = C.pos.clone().addScaledVector(C.dir, -36).add(V(0, 14, 0));
+        if (want.y < C.pos.y + 6) want.y = C.pos.y + 6;
+        this.chasePos.lerp(want, Math.min(1, dt * 3));
+        outLook = C.pos.clone().add(V(0, 2, 0)).lerp(planeP, 0.3);
+      }
     }
     if (outPos.y < 2) outPos.y = 2;
 
@@ -102,6 +136,7 @@ export class View3D {
     const far = this.world.scene.fog.far + 25;
     if (Math.abs(cam.far - far) > 2) { cam.far = far; cam.updateProjectionMatrix(); }
     cam.position.copy(this._p).lerp(this._cp, b);
+    if (this.fx.shake > 0) cam.position.add(this.fx.shakeOffset(this._shake));   // kameraskak efter smällen
     cam.quaternion.copy(this._q).slerp(this._cq, b);
     const fov = 60 + (95 - 60) * b;   // hög FOV i cockpiten
     if (Math.abs(cam.fov - fov) > 0.01) { cam.fov = fov; cam.updateProjectionMatrix(); }
@@ -111,6 +146,7 @@ export class View3D {
 
   destroy() {
     window.removeEventListener('resize', this._resize);
+    this.fx.dispose();
     this.rig.dispose();
     this.world.dispose();
     this.renderer.dispose();

@@ -21,6 +21,7 @@ Båda figurerna syns i cockpiten. Pilotens händer följer ratten och gasreglage
 - Flyg genom ringarna i ordning. Man kan alltid flyga igenom ringar och stjärnor.
 - **Poäng:** ring +100, **Perfect** (inom 40 % av ringens radie) +250, stjärna +50. I mål får man en tidsbonus på 25 poäng per sekund under banans par-tid.
 - **Kraschar man börjar man om från starten.** Planet tumlar först, sedan nollställs portar, stjärnor, poäng och tid.
+- **Kraschen beror på vad man träffar:** mark ger eldklot, brand och brännmärke. En klippa eller kanjonvägg ger en kraftig smäll med stoft och stenskärvor. Ett träd får löv och grenar att yra, och ger lite rök och en liten explosion. En vägg eller tunnel ger betongdamm, gnistor, brand och väggbitar som faller ned. Effekten startar vid kontaktpunkten, och skräpet flyger i fartens riktning. Den del som träffar (vinge, nos, stjärt) lossnar, och vid en hård frontal träff slås hela planet sönder. Storlek, ljusblixt och kameraskak skalas med fart och träffvinkel.
 - Missad port: +5 s på tiden.
 - Rekordet per karta är högsta poäng, och det sparas lokalt i webbläsaren utan konto.
 
@@ -57,6 +58,7 @@ js/voice.js       Röstchatt
 js/levels.js      Kartlistan (20 platser) och banorna
 js/physics.js     Flygmodell och kollisioner
 js/sim.js         Spelregler: poäng, perfect, stjärnor, krasch → omstart, mål
+js/crashfx.js     Kraschens effekter per hindertyp (partikelpool, skrot, brännmärke, blixt)
 js/npc.js         NPC-navigatören (hinderkoll, kommandon, gester, röst)
 js/aipilot.js     AI-piloten som lyder navigatörens pilknappar
 js/models.js      Flygplan och cockpit (från reference/models.js)

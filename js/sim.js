@@ -2,7 +2,7 @@
 // Kraschar man börjar man om från starten (tiden nollställs).
 // Körs hos piloten (auktoritativ) och skickas sedan till navigatören.
 
-import { stepFlight, checkPlaneCollision, gateCrossing, gateLocal, forward, newPlane, FLIGHT } from './physics.js';
+import { stepFlight, planeHit, gateCrossing, gateLocal, forward, newPlane, FLIGHT } from './physics.js';
 import { STAR_RADIUS } from './levels.js';
 
 // Kortaste avståndet från punkten c till sträckan a-b (3D)
@@ -70,15 +70,19 @@ export class FlightSession {
   }
 
 
-  // Planet tumlar efter en krasch: studsar bakåt, snurrar och faller
-  _startTumble() {
+  // Planet tumlar efter en krasch. Rörelsen beror på träffen: en frontal smäll studsar
+  // tillbaka och snurrar hårt, en snuddning glider vidare längs ytan.
+  _startTumble(hit) {
     const p = this.plane;
     const f = forward(p.yaw, p.pitch);
     const v = Math.max(p.speed, 20);
+    const n = hit.n, dot = f[0] * n[0] + f[1] * n[1] + f[2] * n[2];
+    const t = [f[0] - n[0] * dot, f[1] - n[1] * dot, f[2] - n[2] * dot];   // fartens del längs ytan
     const side = p.roll >= 0 ? 1 : -1;
+    const k = 0.5 + 0.6 * hit.sev;
     this.tumble = {
-      vx: -f[0] * v * 0.18, vy: 9, vz: -f[2] * v * 0.18,
-      wr: side * (4 + v * 0.05), wp: -2.2, wy: side * 0.8,
+      vx: t[0] * v * 0.35 + n[0] * 6 * k, vy: 5 + 6 * k + t[1] * v * 0.2, vz: t[2] * v * 0.35 + n[2] * 6 * k,
+      wr: side * (2.5 + v * 0.06) * k, wp: -2.2 * k, wy: side * 0.9 * k,
     };
   }
 
@@ -166,14 +170,24 @@ export class FlightSession {
     }
 
     if (this.grace > 0) { this.grace -= dt; return; }
-    const hit = checkPlaneCollision(this.level, p);
+    const hit = planeHit(this.level, p);
     if (hit) {
+      // Kraschens styrka: fart × hur frontal träffen är × vilken del som träffar
+      const f = forward(p.yaw, p.pitch);
+      const frontal = Math.max(0, Math.min(1, -(f[0] * hit.n[0] + f[1] * hit.n[1] + f[2] * hit.n[2])));
+      const PF = { nose: 1.1, body: 1, 'left wing': 0.7, 'right wing': 0.7, tail: 0.6 };
+      hit.frontal = frontal;
+      hit.sev = Math.min(1.3, Math.max(0.6, p.speed / 44) * (0.45 + 0.75 * frontal) * (PF[hit.part] || 1));
       this.crashes++;
       this.phase = 'crashed';
       this.phaseTimer = CRASH_TIME;
-      this.lastCrash = hit;
-      this._startTumble();
-      this.onEvent({ kind: 'crash', what: hit });
+      this.lastCrash = hit.what;
+      this._startTumble(hit);
+      const r = (v) => Math.round(v * 100) / 100;
+      this.onEvent({
+        kind: 'crash', what: hit.what, type: hit.type, part: hit.part,
+        pos: hit.pos.map(r), n: hit.n.map(r), dir: f.map(r), sev: r(hit.sev), frontal: r(frontal), speed: r(p.speed),
+      });
     }
   }
 

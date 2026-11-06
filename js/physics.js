@@ -164,16 +164,43 @@ export const PROBES = [
   { name: 'right wing', p: [6.4, -0.05, -0.3], r: 0.5 },
 ];
 
-function hitAt(level, x, y, z, r) {
-  if (y < GROUND_Y * (r / PLANE_R)) return 'the ground';
+// Hindertyp för kraschens effekter: mark, berg, trad (träd) eller byggnad
+const BOX_TYPE = { canyon: 'berg', treewall: 'trad', wall: 'byggnad', tunnel: 'byggnad', roof: 'byggnad' };
+const BOX_NAME = { canyon: 'the canyon wall', treewall: 'a tree', wall: 'a wall', tunnel: 'a wall', roof: 'the tunnel roof' };
+const unit = (x, y, z) => { const l = Math.hypot(x, y, z) || 1; return [x / l, y / l, z / l]; };
+
+// Ytans normal på en låda (från lådan mot punkten), i världen
+function boxNormal(b, x, y, z) {
+  const dx = x - b.x, dy = y - b.y, dz = z - b.z;
+  const c = Math.cos(-b.yaw), s = Math.sin(-b.yaw);
+  const lx = dx * c + dz * s, lz = -dx * s + dz * c;
+  // den sida punkten ligger närmast (relativt lådans storlek)
+  const ax = Math.abs(lx) / b.hx, ay = Math.abs(dy) / b.hy, az = Math.abs(lz) / b.hz;
+  let n;
+  if (ax >= ay && ax >= az) n = [Math.sign(lx) || 1, 0, 0];
+  else if (ay >= az) n = [0, Math.sign(dy) || 1, 0];
+  else n = [0, 0, Math.sign(lz) || 1];
+  // tillbaka till världen (rotera med +yaw)
+  const cy = Math.cos(b.yaw), sy = Math.sin(b.yaw);
+  return [n[0] * cy + n[2] * sy, n[1], -n[0] * sy + n[2] * cy];
+}
+
+// Vad (om något) träffar en sfär i punkten? Returnerar { what, type, n } eller null.
+function hitInfo(level, x, y, z, r) {
+  if (y < GROUND_Y * (r / PLANE_R)) return { what: 'the ground', type: 'mark', n: [0, 1, 0] };
   const grid = level._grid;
   const cands = grid ? grid.query(x, z) : null;
   const trees = cands ? cands.trees : level.trees;
   const rocks = cands ? cands.rocks : level.rocks;
-  for (const t of trees) if (hitTree(t, x, y, z, r)) return 'a tree';
-  for (const o of rocks) if (hitRock(o, x, y, z, r)) return 'a rock';
-  for (const b of level.boxes) if (hitBox(b, x, y, z, r)) return b.kind === 'roof' ? 'the tunnel roof' : b.kind === 'canyon' ? 'the canyon wall' : b.kind === 'treewall' ? 'a tree' : 'a wall';
+  for (const t of trees) if (hitTree(t, x, y, z, r)) return { what: 'a tree', type: 'trad', n: unit(x - t.x, 0, z - t.z) };
+  for (const o of rocks) if (hitRock(o, x, y, z, r)) return { what: 'a rock', type: 'berg', n: unit(x - o.x, 0, z - o.z) };
+  for (const b of level.boxes) if (hitBox(b, x, y, z, r)) return { what: BOX_NAME[b.kind] || 'a wall', type: BOX_TYPE[b.kind] || 'byggnad', n: boxNormal(b, x, y, z) };
   return null;
+}
+
+function hitAt(level, x, y, z, r) {
+  const h = hitInfo(level, x, y, z, r);
+  return h ? h.what : null;
 }
 
 // Punktkollision (används av test och för respawn-kontroller)
@@ -195,6 +222,25 @@ export function checkPlaneCollision(level, s) {
   }
   const B = level.bounds, m = 140;
   if (s.x < B.minX - m || s.x > B.maxX + m || s.z < B.minZ - m || s.z > B.maxZ + m) return 'out of bounds';
+  return null;
+}
+
+// Som checkPlaneCollision men med detaljer för kraschens effekter:
+// { what, type, part, pos: [x,y,z], n: [x,y,z] } – vilken del av planet som träffade, var och ytans normal.
+export function planeHit(level, s) {
+  for (const pr of PROBES) {
+    const w = rotYXZ(pr.p[0], pr.p[1], pr.p[2], s.yaw, s.pitch, s.roll);
+    const x = s.x + w[0], y = s.y + w[1], z = s.z + w[2];
+    const h = hitInfo(level, x, y, z, pr.r);
+    if (h) {
+      const what = pr.name === 'body' || pr.name === 'nose' ? h.what : h.what + ' (' + pr.name + ')';
+      return { what, type: h.type, part: pr.name, pos: [x, y, z], n: h.n };
+    }
+  }
+  const B = level.bounds, m = 140;
+  if (s.x < B.minX - m || s.x > B.maxX + m || s.z < B.minZ - m || s.z > B.maxZ + m) {
+    return { what: 'out of bounds', type: 'mark', part: 'body', pos: [s.x, s.y, s.z], n: [0, 1, 0] };
+  }
   return null;
 }
 

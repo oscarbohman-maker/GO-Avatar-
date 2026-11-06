@@ -54,6 +54,44 @@ export class PlaneRig {
 
   _get(n) { return this.cockpit.getObjectByName(n); }
 
+  // Krasch: den del som träffade lossnar som skrot. Vid hård träff (sev >= 0.8) slås hela planet sönder.
+  // Skrotet är kopior av modellens delar (delar geometri och material) som läggs i kraschens effekter.
+  breakApart(e, fx) {
+    const SIDE = {
+      'right wing': ['vinge_h', 'vingspets_h', 'motor_h', 'motorring_h', 'spinner_h', 'propeller_h'],
+      'left wing': ['vinge_v', 'vingspets_v', 'motor_v', 'motorring_v', 'spinner_v', 'propeller_v'],
+      tail: ['stabilisator_h', 'stabilisator_v', 'fena', 'fenspets'],
+      nose: ['vindruta_v', 'vindruta_h'],
+      body: Math.random() < 0.5 ? ['motor_h', 'motorring_h', 'spinner_h', 'propeller_h'] : ['motor_v', 'motorring_v', 'spinner_v', 'propeller_v'],
+    };
+    const full = (e.sev || 0) >= 0.8;
+    const names = full ? this.exterior.children.map((c) => c.name) : (SIDE[e.part] || []);
+    const p = new THREE.Vector3(...e.pos), n = new THREE.Vector3(...(e.n || [0, 1, 0]));
+    const dir = new THREE.Vector3(...(e.dir || [0, 0, -1]));
+    const td = dir.clone().addScaledVector(n, -dir.dot(n));
+    const speed = e.speed || 40;
+    this.root.updateMatrixWorld(true);
+    const wp = new THREE.Vector3(), wq = new THREE.Quaternion(), ws = new THREE.Vector3();
+    for (const nm of names) {
+      const obj = this.exterior.getObjectByName(nm);
+      if (!obj || !obj.visible) continue;
+      obj.matrixWorld.decompose(wp, wq, ws);
+      const copy = obj.clone();                           // delar geometri och material med originalet
+      copy.position.copy(wp); copy.quaternion.copy(wq); copy.scale.copy(ws);
+      obj.visible = false;
+      const near = wp.distanceTo(p) < 6 ? 1.4 : 1;          // delar nära träffen kastas hårdast
+      const out = wp.clone().sub(p).normalize();
+      const v = out.multiplyScalar((full ? 8 : 6) * near).addScaledVector(n, 6).addScaledVector(td, speed * (full ? 0.25 : 0.35)).add(new THREE.Vector3(0, full ? 10 : 6, 0));
+      const w = new THREE.Vector3((Math.random() - 0.5) * 14, (Math.random() - 0.5) * 14, (Math.random() - 0.5) * 14);
+      fx.addDebris(copy, v, w);
+    }
+  }
+
+  // Ny start: alla delar tillbaka på planet
+  restoreParts() {
+    this.exterior.children.forEach((c) => { c.visible = true; });
+  }
+
   // Tillägg till cockpitmodellen (originalet i models.js är orört): referensmodellen
   // har öppna sidor ovanför sidoväggarna och inget tak, men flygplanet utifrån är
   // slutet. Här fylls sidorna, taket och bakväggen i, med ett tonat sidofönster fram.

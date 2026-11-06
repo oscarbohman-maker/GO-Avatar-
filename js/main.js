@@ -540,7 +540,10 @@ function handleEvent(e) {
       }
       break;
     case 'miss': flash(`Missed gate ${e.gate + 1}! <small>+${g.level.penalties.miss} s</small>`, 'bad', 1300, true); sfx.miss(); break;
-    case 'crash': flash(`CRASH! <small>into ${esc(e.what)} · back to the start</small>`, 'bad', 1800, true); sfx.crash(); break;
+    case 'crash':
+      flash(`CRASH! <small>into ${esc(e.what)} · back to the start</small>`, 'bad', 1800, true); sfx.crash();
+      if (g.onCrash) g.onCrash(e);
+      break;
     case 'respawn': if (g.onRespawn) g.onRespawn(); break;
     case 'star':
       flash(`⭐ ${e.count}/${e.total} <small>+${e.points} points</small>`, 'gold', 700, true);
@@ -609,15 +612,18 @@ async function startGame() {
       },
       setRoute: (pts) => pv.setRoute(pts),
       onStar: (idx) => { pv.view.world.setStarCollected(idx); if (minimap) minimap.collected.add(idx); },
+      onCrash: (e) => pv.view.onCrash(e),
       onRespawn: () => {
-        // ny runda från starten: stjärnorna kommer tillbaka
+        // ny runda från starten: stjärnorna kommer tillbaka, planet blir helt igen
         pv.view.world.resetStars();
+        pv.view.onRespawn();
         if (minimap) { minimap.resetTrail(); }
         if (npc) npc = new NpcNavigator(level);
       },
       restart: (notify) => {
         pv.restart();
         pv.view.world.resetStars();
+        pv.view.onRespawn();
         if (npc) { npc = new NpcNavigator(level); setSub(''); }
         $('#results').classList.add('hidden');
         if (minimap) minimap.resetTrail();
@@ -728,13 +734,16 @@ async function startGame() {
         mini.collected.add(idx);
         view.view.world.setStarCollected(idx);
       },
+      onCrash: (e) => view.view.onCrash(e),
       onRespawn: () => {
         mini.resetTrail();
         view.view.world.resetStars();
+        view.view.onRespawn();
       },
       waitForStart: () => {
         g.goSentAt = 0;
         view.view.world.resetStars();
+        view.view.onRespawn();
         mini.resetTrail();
         startPill.classList.remove('hidden');
       },
