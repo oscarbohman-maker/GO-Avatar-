@@ -36,9 +36,24 @@ function saveHostCode(v) { try { localStorage.setItem(CODE_KEY, JSON.stringify(v
 export function clearHostCode() { try { localStorage.removeItem(CODE_KEY); } catch (_) {} }
 
 // Möjlighet att peka på egen PeerJS-server, t.ex. ?peerHost=localhost&peerPort=9000&peerPath=/
+// Fler STUN-servrar (hittar vägen genom routrar) och PeerJS TURN-reläer både via UDP och TCP
+// (TCP hjälper när mobilnät blockerar UDP).
+const ICE = {
+  iceServers: [
+    { urls: ['stun:stun.l.google.com:19302', 'stun:stun1.l.google.com:19302', 'stun:stun2.l.google.com:19302'] },
+    { urls: 'stun:stun.cloudflare.com:3478' },
+    {
+      urls: ['turn:eu-0.turn.peerjs.com:3478', 'turn:us-0.turn.peerjs.com:3478',
+        'turn:eu-0.turn.peerjs.com:3478?transport=tcp', 'turn:us-0.turn.peerjs.com:3478?transport=tcp'],
+      username: 'peerjs', credential: 'peerjsp',
+    },
+  ],
+  sdpSemantics: 'unified-plan',
+};
+
 function peerOptions() {
   const q = new URLSearchParams(location.search);
-  const opts = { debug: 1 };
+  const opts = { debug: 1, config: ICE };
   if (q.get('peerHost')) {
     opts.host = q.get('peerHost');
     opts.port = Number(q.get('peerPort') || 443);
@@ -57,6 +72,8 @@ const ERRORS = {
   'browser-incompatible': 'Your browser does not support WebRTC. Update Safari or try another browser.',
   'webrtc': 'Could not create a direct connection between you (WebRTC).',
 };
+const MSG_ICE_FAILED = 'Your devices found each other but could not connect – your networks block a direct connection. Try both on the same wifi, or switch one phone between wifi and mobile data.';
+const MSG_NO_HOST = "Could not reach your friend's game. Make sure the code is right and that your friend keeps Plain Dodge open on screen (not in the background).";
 
 export class Net {
   constructor() {
@@ -83,7 +100,8 @@ export class Net {
 
   host(attempt = 0) {
     this.isHost = true;
-    const saved = attempt === 0 ? loadHostCode() : null;
+    const saved = this._forced || (attempt === 0 ? loadHostCode() : null);
+    this._forced = null;
     this.code = saved ? saved.code : randomCode();
     this.created = saved ? saved.created : Date.now();
     const peer = this._createPeer(PREFIX + this.code);
@@ -104,19 +122,67 @@ export class Net {
       this._bind(conn);
     });
     peer.on('error', (err) => {
-      if (err.type === 'unavailable-id' && attempt < 5) {
-        // koden används redan (t.ex. i en annan flik) – ta en ny
-        peer.destroy();
-        this.host(attempt + 1);
+      if (err.type === 'unavailable-id') {
+        if (this._registered) {
+          // Vi hade redan koden och höll på att återansluta (t.ex. efter att Safari varit i bakgrunden).
+          // Servern minns fortfarande den gamla anslutningen en stund – försök igen med SAMMA kod,
+          // så att koden som vännen fått fortsätter att fungera.
+          this._retrySameCode();
+          return;
+        }
+        if (attempt < 5) {
+          // koden används redan av någon annan (eller en annan flik) – ta en ny innan vi visat den
+          peer.destroy();
+          this.host(attempt + 1);
+          return;
+        }
+      }
+      if (['network', 'server-error', 'socket-error', 'socket-closed', 'disconnected'].includes(err.type) && this._registered) {
+        this.emit('status', 'reconnecting');
+        this._scheduleReconnect();
         return;
       }
       this._error(err);
     });
+    peer.on('open', () => { this._registered = true; this._retries = 0; this.emit('status', 'online'); });
     peer.on('disconnected', () => {
-      // Tappad kontakt med signalservern. Pågående spel fortsätter peer-to-peer,
-      // men försök återansluta så att vännen kan gå med.
-      if (!this.closed && !peer.destroyed) setTimeout(() => { try { peer.reconnect(); } catch (_) {} }, 1000);
+      // Tappad kontakt med servern (t.ex. när Safari lagts i bakgrunden).
+      // Ett pågående spel fortsätter direkt mellan er, men utan servern kan ingen ny vän gå med.
+      if (this.closed || peer.destroyed) return;
+      this.emit('status', 'reconnecting');
+      this._scheduleReconnect();
     });
+    // När sidan blir synlig igen: återanslut direkt
+    if (!this._vis) {
+      this._vis = () => { if (document.visibilityState === 'visible' && this.peer && this.peer.disconnected && !this.closed) this._scheduleReconnect(0); };
+      document.addEventListener('visibilitychange', this._vis);
+    }
+  }
+
+  _scheduleReconnect(delay = 1000) {
+    clearTimeout(this._rt);
+    this._rt = setTimeout(() => {
+      const p = this.peer;
+      if (this.closed || !p) return;
+      if (p.destroyed) { this._retrySameCode(); return; }
+      if (p.disconnected) { try { p.reconnect(); } catch (_) { this._retrySameCode(); } }
+    }, delay);
+  }
+
+  // Skapa en ny peer med samma kod (efter en stund, så att servern hunnit glömma den gamla)
+  _retrySameCode() {
+    clearTimeout(this._rt);
+    this._retries = (this._retries || 0) + 1;
+    const wait = Math.min(8000, 1500 * this._retries);
+    this.emit('status', 'reconnecting');
+    this._rt = setTimeout(() => {
+      if (this.closed) return;
+      // Pågår ett spel får peeren inte förstöras (då stängs anslutningen till vännen) – försök bara återansluta
+      if (this.connected && this.peer && !this.peer.destroyed) { try { this.peer.reconnect(); } catch (_) {} return; }
+      try { this.peer && this.peer.destroy(); } catch (_) {}
+      this._forced = { code: this.code, created: this.created };   // samma kod, ingen ny
+      this.host(0);
+    }, wait);
   }
 
   // Millisekunder kvar tills koden går ut
@@ -128,20 +194,50 @@ export class Net {
     clearHostCode();
   }
 
+  // Gå med: kontakta servern, leta upp värdens kod och öppna en direktanslutning.
+  // Hittas inte värden försöker vi igen några gånger (värden kan ha haft spelet i bakgrunden).
   join(code) {
     this.isHost = false;
     this.code = normalizeCode(code);
+    this._joinTries = 0;
     const peer = this._createPeer(null);
     this.peer = peer;
-    peer.on('open', () => {
-      const conn = peer.connect(PREFIX + this.code, { reliable: true, serialization: 'json' });
-      this._bind(conn);
-      // Om anslutningen inte öppnas inom rimlig tid
-      setTimeout(() => {
-        if (!this.closed && !this._errored && !(this.conn && this.conn.open)) this.emit('error', 'Connecting took too long. Check the code and try again.');
-      }, 15000);
+    this.emit('status', 'server');
+    // Hela förloppet har en tidsgräns, även om servern aldrig svarar
+    this._joinDeadline = setTimeout(() => {
+      if (this.closed || this.connected || this._errored) return;
+      this._errored = true;
+      this.emit('error', !peer.open ? ERRORS.network
+        : this._iceFailed ? MSG_ICE_FAILED
+        : this._sawHost ? MSG_ICE_FAILED : MSG_NO_HOST);
+    }, 40000);
+    peer.on('open', () => this._tryConnect());
+    peer.on('error', (err) => {
+      if (err.type === 'peer-unavailable' && this._joinTries < 4 && !this.closed) {
+        // värden finns inte (just nu) – vänta och försök igen
+        this.emit('status', 'retry');
+        setTimeout(() => this._tryConnect(), 3000);
+        return;
+      }
+      if (err.type === 'peer-unavailable') { this._errored = true; clearTimeout(this._joinDeadline); this.emit('error', MSG_NO_HOST); return; }
+      clearTimeout(this._joinDeadline);
+      this._error(err);
     });
-    peer.on('error', (err) => this._error(err));
+  }
+
+  _tryConnect() {
+    if (this.closed || this.connected || this._errored) return;
+    this._joinTries++;
+    this.emit('status', 'finding');
+    const conn = this.peer.connect(PREFIX + this.code, { reliable: true, serialization: 'json' });
+    this._bind(conn);
+    conn.on('iceStateChanged', (st) => {
+      if (st === 'checking') { this._sawHost = true; this.emit('status', 'linking'); }
+      if (st === 'failed' && !conn.open) {
+        this._iceFailed = true;
+        if (!this._errored && !this.closed) { this._errored = true; clearTimeout(this._joinDeadline); this.emit('error', MSG_ICE_FAILED); }
+      }
+    });
   }
 
   _error(err) {
@@ -155,6 +251,7 @@ export class Net {
     this._lostFired = false;
     conn.on('open', () => {
       if (this.conn !== conn) return;
+      clearTimeout(this._joinDeadline);
       this.lastSeen = performance.now();
       clearInterval(this._hb);
       this._hb = setInterval(() => {
@@ -192,6 +289,9 @@ export class Net {
   close() {
     this.closed = true;
     clearInterval(this._hb);
+    clearTimeout(this._rt);
+    clearTimeout(this._joinDeadline);
+    if (this._vis) document.removeEventListener('visibilitychange', this._vis);
     try { this.conn && this.conn.close(); } catch (_) {}
     try { this.peer && this.peer.destroy(); } catch (_) {}
     this.handlers = {};

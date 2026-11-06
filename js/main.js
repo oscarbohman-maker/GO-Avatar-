@@ -259,6 +259,21 @@ function wireNet(net) {
     if (app.isHost) setStatus($('#lobby-status'), text, 'error');
     else goHome(text, 'error', 'screen-friends');
   });
+  net.on('status', (st) => {
+    if (app.net !== net) return;
+    if (net.isHost) {
+      if (st === 'reconnecting' && !net.connected) setStatus($('#lobby-status'), 'Reconnecting to the server... keep this screen open.');
+      if (st === 'online' && !app.friendName) setStatus($('#lobby-status'), 'Ready! Give the code to your friend. Keep this screen open until they have joined.', 'ok');
+    } else {
+      const T = {
+        server: 'Contacting the server...',
+        finding: `Looking for game ${net.code}...`,
+        retry: `Game ${net.code} not found yet – trying again...`,
+        linking: 'Found your friend! Connecting...',
+      };
+      if (T[st]) setStatus($('#friends-status'), T[st]);
+    }
+  });
   net.on('open', () => {
     if (app.net !== net) return;
     setupVoice();
@@ -319,7 +334,7 @@ function hostGame() {
   wireNet(app.net);
   app.net.on('code', (code) => {
     $('#lobby-code').textContent = code;
-    setStatus($('#lobby-status'), 'Give the code to your friend, or tap "Share link".');
+    setStatus($('#lobby-status'), 'Ready! Give the code to your friend. Keep this screen open until they have joined.', 'ok');
     updateExpiry();
     clearInterval(app._expiryTimer);
     app._expiryTimer = setInterval(updateExpiry, 30000);
