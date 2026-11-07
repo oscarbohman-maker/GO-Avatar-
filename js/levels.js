@@ -2,6 +2,7 @@
 // piloten och navigatören får exakt samma bana utan att skicka geometrin.
 
 import { yawFromDir, buildGrid } from './physics.js';
+import { THEMES, WEATHER, TIERS, tierOf } from './themes.js';
 
 export function mulberry32(a) {
   return function () {
@@ -13,15 +14,16 @@ export function mulberry32(a) {
 }
 
 // Free play: 20 kartplatser. Bara de som är klara går att välja, resten visas skuggade.
-const DIFF = ['Practice', 'Easy', 'Easy', 'Easy', 'Medium', 'Medium', 'Medium', 'Medium', 'Hard', 'Hard',
-  'Hard', 'Hard', 'Hard', 'Expert', 'Expert', 'Expert', 'Expert', 'Expert', 'Insane', 'Insane'];
-export const MAPS = Array.from({ length: 20 }, (_, i) => ({ n: i + 1, id: null, name: 'Coming soon', difficulty: DIFF[i], available: false }));
-Object.assign(MAPS[0], { id: 'test', name: 'Canyon Loop', available: true });
-Object.assign(MAPS[1], { id: 'demo', name: 'Training Flight', available: true });
+// Svårigheten visas som 1–5 pluppar (tier).
+export const MAPS = Array.from({ length: 20 }, (_, i) => ({
+  n: i + 1, id: null, name: 'Coming soon', tier: tierOf(i + 1), difficulty: TIERS[tierOf(i + 1)], available: false,
+}));
+Object.assign(MAPS[0], { id: 'test', name: 'Canyon Loop', available: true, theme: 'canyon', weather: 'calm', difficulty: 'Practice' });
+Object.assign(MAPS[1], { id: 'demo', name: 'Training Flight', available: true, theme: 'forest', weather: 'calm' });
 
 export const LEVEL_INFO = {
-  test: { id: 'test', name: 'Canyon Loop', world: 'test', difficulty: 'Practice' },
-  demo: { id: 'demo', name: 'Training Flight', world: 'skog', difficulty: 'Easy' },
+  test: { id: 'test', name: 'Canyon Loop', world: 'canyon', difficulty: 'Practice' },
+  demo: { id: 'demo', name: 'Training Flight', world: 'forest', difficulty: 'Easy' },
 };
 
 function distToSegment2(px, pz, ax, az, bx, bz) {
@@ -378,12 +380,13 @@ function addStars(level) {
 // lägre tak, mindre hål, fler fallande stenar och mer storm.
 // Allt är seedat, så båda spelarna får exakt samma bana.
 export const GEN_MAPS = [
-  // [nummer, namn, tema, variant] – varianten är ett förvalt frö som är provflugen (tests/sim.test.mjs)
-  [3, 'Pine Valley', 'forest', 0], [4, 'Hill Hopper', 'forest', 0], [5, 'Window Woods', 'forest', 0], [6, 'Low Roof Forest', 'forest', 1],
-  [7, 'Mountain Pass', 'mountain', 0], [8, 'Boulder Gorge', 'mountain', 28], [9, 'Rockfall Run', 'mountain', 3], [10, 'Granite Gates', 'mountain', 12],
-  [11, 'Rainy Pines', 'storm-forest', 0], [12, 'Gale Forest', 'storm-forest', 0], [13, 'Storm Slalom', 'storm-forest', 2], [14, 'Thunder Woods', 'storm-forest', 0],
-  [15, 'Thunder Canyon', 'storm-mountain', 1], [16, 'Avalanche Alley', 'storm-mountain', 11], [17, 'Lightning Ridge', 'storm-mountain', 7],
-  [18, 'Eye of the Storm', 'storm-mountain', 3], [19, 'Doom Gorge', 'storm-mountain', 15], [20, 'The Gauntlet', 'storm-mountain', 1],
+  // [nummer, namn, tema, väder, variant] – varianten är ett förvalt frö som är provflugen (tests/sim.test.mjs)
+  [3, 'Pine Valley', 'forest', 'calm', 0], [4, 'Hill Hopper', 'forest', 'calm', 0], [5, 'Window Woods', 'forest', 'breeze', 0],
+  [6, 'Dune Drift', 'desert', 'heat', 0], [7, 'Cactus Canyon', 'desert', 'heat', 0], [8, 'Sandstorm Mesa', 'desert', 'sandstorm', 0],
+  [9, 'Jungle Dash', 'jungle', 'rain', 0], [10, 'Vine Gorge', 'jungle', 'rain', 1], [11, 'Monsoon Temple', 'jungle', 'storm', 0],
+  [12, 'Red Rock Pass', 'redrock', 'breeze', 0], [13, 'Boulder Gorge', 'redrock', 'breeze', 0], [14, 'Rockfall Run', 'redrock', 'breeze', 2],
+  [15, 'Frost Pass', 'arctic', 'snow', 1], [16, 'Avalanche Alley', 'arctic', 'snow', 4], [17, 'Blizzard Peaks', 'arctic', 'blizzard', 9],
+  [18, 'Ash Valley', 'lava', 'embers', 2], [19, 'Magma Gorge', 'lava', 'embers', 6], [20, 'The Inferno', 'lava', 'eruption', 3],
 ];
 
 // Vilka faser som finns från vilken svårighet
@@ -406,13 +409,13 @@ function crossWall(boxes, cx, cz, yaw, halfW, height, holeY, holeHalf, kind) {
   if (above > 0.2) put(0, holeY + holeHalf + above / 2, holeHalf, above / 2);
 }
 
-function buildGenerated(n, name, theme, variant = 0) {
+function buildGenerated(n, name, theme, weatherId = 'calm', variant = 0) {
   const S = WORLD_SCALE;
   const d = Math.max(0, Math.min(1, (n - 3) / 17));
   const rand = mulberry32(9100 + n * 131 + variant * 7919);
   const R = (a, b) => a + rand() * (b - a);
-  const mountain = theme.includes('mountain');
-  const storm = theme.startsWith('storm');
+  const TH = THEMES[theme], WX = WEATHER[weatherId];
+  const mountain = TH.walls === 'rock';               // klippväggar (annars skogsväggar)
   const H0 = 15;
   const nG = 10 + Math.round(d * 8);
   const halfW = 11 - 1.2 * d;                           // korridorens halva bredd (oskalad; ×2 i världen)
@@ -569,7 +572,11 @@ function buildGenerated(n, name, theme, variant = 0) {
   const bounds = { minX: Math.min(...xs) - 30, maxX: Math.max(...xs) + 30, minZ: Math.min(...zs) - 30, maxZ: Math.max(...zs) + 30 };
   let len = 0;
   for (let i = 0; i < path.length - 1; i++) len += Math.hypot(path[i + 1][0] - path[i][0], path[i + 1][2] - path[i][2]);
-  const weather = storm ? { rain: true, lightning: d > 0.45, wind: { dir: rand() * Math.PI * 2, strength: 1.5 + 3 * d } } : null;
+  const windDir = rand() * Math.PI * 2;
+  const weather = {
+    id: weatherId, particles: WX.particles || null, lightning: !!WX.lightning, rain: WX.particles === 'rain',
+    wind: WX.wind ? { dir: windDir, strength: WX.wind * (1 + 1.2 * d) } : null,
+  };
   return scaleLevel({
     id: 'm' + n,
     name,
@@ -581,17 +588,17 @@ function buildGenerated(n, name, theme, variant = 0) {
     halfs: half.slice(),                                // korridorens halva bredd per sträcka
     centers,
     ceiling: 50,
-    fog: storm ? { color: 0x8592a0, near: 18, far: 85 } : { color: 0xaec3d3, near: 20, far: 90 },
-    pilotFog: storm ? { color: 0x7d8896, near: 0, far: 40 - 6 * d } : null,
+    fog: { color: TH.sky, near: WX.dense ? 16 : 20, far: WX.dense ? 75 : 90 },
+    pilotFog: { color: TH.pilotFog, near: 0, far: 44 - (WX.dense ? 7 : 0) - 4 * d },
     penalties: { crash: 3, miss: 5 },
   }, S);
 }
 
 const builders = { test: buildTest, demo: buildDemo };
 for (const row of GEN_MAPS) {
-  const [n, name, theme] = row;
-  builders['m' + n] = () => buildGenerated(n, name, theme, row[3] || 0);
-  Object.assign(MAPS[n - 1], { id: 'm' + n, name, available: true, theme });
+  const [n, name, theme, weather] = row;
+  builders['m' + n] = () => buildGenerated(n, name, theme, weather, row[4] || 0);
+  Object.assign(MAPS[n - 1], { id: 'm' + n, name, available: true, theme, weather });
   LEVEL_INFO['m' + n] = { id: 'm' + n, name, world: theme, difficulty: MAPS[n - 1].difficulty };
 }
 
@@ -601,6 +608,7 @@ export function buildLevel(id) {
   const level = b();
   if (!level.stars) addStars(level);
   level.decor = level.decor || [];
+  if (!level.theme) level.theme = id === 'test' ? 'canyon' : 'forest';
   // Pilotens sikt i cockpiten: mycket tät, ljusgrå dimma som börjar direkt
   // (helt tät vid ca 44 m, träden vid sidorna ~20 m bort är halvt dolda)
   level.pilotFog = level.pilotFog || { color: 0xc6ced6, near: 0, far: 44 };

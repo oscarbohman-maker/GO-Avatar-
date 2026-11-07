@@ -2,6 +2,7 @@
 // Kontrollerar att banorna går att flyga igenom och att reglerna fungerar.
 import assert from 'node:assert/strict';
 import { buildLevel, GEN_MAPS } from '../js/levels.js';
+import { THEMES } from '../js/themes.js';
 import { FlightSession, STEP, POINTS, timeBonus } from '../js/sim.js';
 import { checkCollision, gateLocal, forward, gateCrossing, moverY } from '../js/physics.js';
 import { NpcNavigator, pursuitTarget } from '../js/npc.js';
@@ -287,9 +288,13 @@ test('kartor 3–20: alla finns, är spelbara och blir svårare', () => {
   const obst = (L) => L.rocks.length + L.movers.length + L.zones.length;
   assert.ok(obst(gen[17]) > obst(gen[0]) * 1.5, 'sista kartan har klart fler hinder än första');
   assert.ok(gen[17].halfW < gen[0].halfW, 'korridoren blir smalare');
-  // storm, regn och fallande stenar på de svåra kartorna
-  gen.slice(8).forEach((L) => assert.ok(L.weather && L.weather.rain && L.weather.wind, L.name + ': storm'));
-  assert.ok(gen.slice(12).every((L) => L.weather.lightning), 'blixtar på de svåraste');
+  // teman: tre kartor per värld, i ordning från skog till lava
+  assert.deepEqual([...new Set(gen.map((L) => L.theme))], ['forest', 'desert', 'jungle', 'redrock', 'arctic', 'lava']);
+  gen.forEach((L) => assert.ok(THEMES[L.theme], L.name + ': tema finns'));
+  // väder: vind från karta 5, partiklar (sand, regn, snö, glöd) och blixtar på stormkartorna
+  gen.slice(2).forEach((L) => assert.ok(L.weather.wind && L.weather.wind.strength > 0, L.name + ': vind'));
+  assert.deepEqual(gen.filter((L) => L.weather.lightning).map((L) => L.name), ['Monsoon Temple', 'The Inferno']);
+  assert.ok(gen.slice(5).every((L) => L.weather.particles || L.theme === 'redrock'), 'partiklar i vädret');
   assert.ok(gen.reduce((a, L) => a + L.movers.length, 0) >= 20, 'fallande stenar finns');
   // upp och ner: höjdskillnaden mellan portarna växer
   const span = (L) => Math.max(...L.gates.map((g) => g.y)) - Math.min(...L.gates.map((g) => g.y));

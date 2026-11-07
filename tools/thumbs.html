@@ -1,0 +1,19 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Map thumbnails</title>
+<style>
+  body { margin: 0; padding: 16px; background: #0b1a3a; color: #eef4ff; font-family: system-ui, sans-serif; }
+  .grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); gap: 12px; }
+  figure { margin: 0; } img { width: 100%; border-radius: 10px; display: block; } figcaption { font-size: 13px; padding: 4px 2px; }
+</style>
+</head>
+<body>
+<!-- Utvecklarsida: renderar miniatyrbilder av alla kartor med spelets egen 3D-motor.
+     Spara dem med: node tools/render-thumbs.cjs (kräver Playwright och en lokal webbserver). -->
+<div class="grid" id="grid"></div>
+<script type="module" src="./thumbs.js"></script>
+</body>
+</html>

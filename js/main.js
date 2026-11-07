@@ -8,6 +8,7 @@ import { sfx, unlockAudio, setSfxEnabled } from './sfx.js';
 import { NpcNavigator, NpcVoice } from './npc.js';
 import { icon, applyIcons, setIconLabel } from './icons.js';
 import { POINTS } from './sim.js';
+import { THEMES, WEATHER } from './themes.js';
 
 const $ = (s, r = document) => r.querySelector(s);
 const $$ = (s, r = document) => Array.from(r.querySelectorAll(s));
@@ -137,6 +138,8 @@ function initMenus() {
   // val av roll i free play
   const sheet = $('#mode-sheet');
   $('.sheet-cancel', sheet).onclick = () => sheet.classList.add('hidden');
+  $('.ms-close', sheet).onclick = () => { sfx.click(); sheet.classList.add('hidden'); };
+  document.addEventListener('keydown', (e) => { if (e.key === 'Escape' && !sheet.classList.contains('hidden')) sheet.classList.add('hidden'); });
   sheet.addEventListener('click', (e) => { if (e.target === sheet) sheet.classList.add('hidden'); });
   $$('.mode-opt', sheet).forEach((b) => {
     b.onclick = () => {
@@ -167,36 +170,124 @@ function initMenus() {
 }
 
 // ---------------------------------------------------------------- free play
+// Världarna i Free Play: först träningsbanorna, sedan ett tema i taget
+const WORLDS = [
+  { key: 'training', name: 'Training', tagline: 'Learn to fly blind and to guide', icon: 'target', accent: '#4dd0ff', maps: [1, 2] },
+  ...['forest', 'desert', 'jungle', 'redrock', 'arctic', 'lava'].map((k) => ({
+    key: k, name: THEMES[k].name, tagline: THEMES[k].tagline, icon: THEMES[k].icon, accent: THEMES[k].accent,
+    maps: MAPS.filter((m) => m.n > 2 && m.theme === k).map((m) => m.n),
+  })),
+];
+const fmt = (n) => Math.round(n || 0).toLocaleString('en-US');
+const thumbUrl = (m) => `img/maps/${m.id}.jpg`;
+
+// Svårighet som 1–5 pluppar
+function pips(tier) {
+  let h = '';
+  for (let i = 1; i <= 5; i++) h += `<i class="${i <= tier ? 'on' : ''}"></i>`;
+  return `<span class="pips t${tier}" role="img" aria-label="Difficulty ${tier} of 5">${h}</span>`;
+}
+
+// Fakta om en karta (byggs första gången den behövs)
+const statsCache = {};
+function mapStats(id) {
+  if (statsCache[id]) return statsCache[id];
+  const L = buildLevel(id);
+  let len = 0;
+  const P = L.path || [];
+  for (let i = 0; i < P.length - 1; i++) len += Math.hypot(P[i + 1][0] - P[i][0], P[i + 1][2] - P[i][2]);
+  const hazards = [...new Set((L.zones || []).map((z) => z.type))];
+  return (statsCache[id] = { gates: L.gates.length, stars: (L.stars || []).length, len, par: L.par, hazards });
+}
+
 function mapCard(m, opts = {}) {
   const el = document.createElement('button');
   el.type = 'button';
-  el.className = 'map-card' + (m.available ? '' : ' locked') + (opts.selected ? ' selected' : '');
+  el.className = 'map-card' + (m.available ? '' : ' locked') + (opts.selected ? ' selected' : '') + (opts.compact ? ' compact' : '');
+  const T = THEMES[m.theme] || THEMES.forest;
+  const WX = WEATHER[m.weather] || WEATHER.calm;
+  el.style.setProperty('--acc', T.accent);
+  el.style.setProperty('--c1', T.card[0]);
+  el.style.setProperty('--c2', T.card[1]);
   const best = m.available && Store.profile.best[m.id];
-  el.innerHTML = `<span class="num">MAP ${m.n}</span><span class="name">${esc(m.available ? m.name : 'Coming soon')}</span>`
-    + `<span class="diff d-${esc(m.difficulty)}">${esc(m.difficulty)}</span>`
-    + (best ? `<span class="best">Best: ${best.score != null ? best.score + ' pts · ' : ''}${best.time.toFixed(1)} s</span>` : (m.available ? '<span class="best">Not flown yet</span>' : ''))
-    + (m.available ? `<span class="art">${icon('plane')}</span>` : `<span class="lock">${icon('lock')}</span>`);
+  el.setAttribute('aria-label', `Map ${m.n}: ${m.name}. ${m.difficulty}, difficulty ${m.tier} of 5. ${best ? 'Best ' + fmt(best.score) + ' points.' : 'Not flown yet.'}`);
+  el.innerHTML = `<span class="mc-thumb">${m.available ? '<img alt="" loading="lazy" decoding="async">' : ''}`
+    + `<span class="mc-num">${String(m.n).padStart(2, '0')}</span>`
+    + (best ? `<span class="mc-done" title="Completed">${icon('check')}</span>` : '')
+    + (opts.compact ? '' : `<span class="mc-wx">${icon(WX.icon)}<span>${esc(WX.name)}</span></span>`)
+    + (m.available ? '' : `<span class="mc-lock">${icon('lock')}</span>`)
+    + `</span><span class="mc-body"><span class="mc-name">${esc(m.available ? m.name : 'Coming soon')}</span>`
+    + `<span class="mc-meta">${pips(m.tier)}<span class="mc-diff">${esc(m.difficulty)}</span></span>`
+    + (opts.compact ? '' : `<span class="mc-best">${best
+      ? `${icon('award')}<b>${fmt(best.score)}</b><span>pts</span><span class="dot"></span>${icon('star')}<b>${best.stars || 0}</b>`
+      : '<span class="muted">Not flown yet</span>'}</span>`)
+    + '</span>';
+  const img = el.querySelector('img');
+  if (img) {
+    img.addEventListener('load', () => el.classList.add('loaded'));
+    img.addEventListener('error', () => img.remove());
+    img.src = thumbUrl(m);
+  }
   if (!m.available) el.disabled = true;
   return el;
 }
 
 function renderMapGrid() {
-  const grid = $('#map-grid');
-  grid.innerHTML = '';
-  MAPS.forEach((m, i) => {
-    const el = mapCard(m);
-    el.style.animationDelay = (i * 0.025) + 's';
-    if (m.available) el.onclick = () => { sfx.click(); openModeSheet(m); };
-    grid.appendChild(el);
+  const root = $('#map-grid');
+  root.innerHTML = '';
+  const best = Store.profile.best;
+  const flown = MAPS.filter((m) => m.available && best[m.id]);
+  $('#fp-progress').innerHTML = `<span><b>${flown.length}</b>/${MAPS.length} flown</span><span class="dot"></span>`
+    + `<span>${icon('star')}<b>${flown.reduce((a, m) => a + (best[m.id].stars || 0), 0)}</b></span><span class="dot"></span>`
+    + `<span>${icon('award')}<b>${fmt(flown.reduce((a, m) => a + (best[m.id].score || 0), 0))}</b> pts</span>`;
+  let k = 0;
+  WORLDS.forEach((w) => {
+    const sec = document.createElement('section');
+    sec.className = 'world';
+    sec.style.setProperty('--acc', w.accent);
+    const done = w.maps.filter((n) => best[MAPS[n - 1].id]).length;
+    sec.innerHTML = `<header class="world-head"><span class="world-ico">${icon(w.icon)}</span>`
+      + `<div class="world-title"><h3>${esc(w.name)}</h3><p>${esc(w.tagline)}</p></div>`
+      + `<span class="world-count">Maps ${w.maps[0]}–${w.maps[w.maps.length - 1]}<small>${done}/${w.maps.length} flown</small></span></header>`
+      + '<div class="map-grid"></div>';
+    const grid = sec.querySelector('.map-grid');
+    w.maps.forEach((n) => {
+      const m = MAPS[n - 1];
+      const el = mapCard(m);
+      el.style.animationDelay = (k++ * 0.03) + 's';
+      if (m.available) el.onclick = () => { sfx.click(); openModeSheet(m); };
+      grid.appendChild(el);
+    });
+    root.appendChild(sec);
   });
 }
 
 function openModeSheet(m) {
   const sheet = $('#mode-sheet');
   sheet.dataset.level = m.id;
-  $('.sheet-title', sheet).textContent = `Map ${m.n}: ${m.name}`;
-  sheet.classList.remove('hidden');
+  const T = THEMES[m.theme] || THEMES.forest;
+  const WX = WEATHER[m.weather] || WEATHER.calm;
+  const st = mapStats(m.id);
+  const best = Store.profile.best[m.id];
   const panel = $('.sheet-panel', sheet);
+  panel.style.setProperty('--acc', T.accent);
+  panel.style.setProperty('--c1', T.card[0]);
+  panel.style.setProperty('--c2', T.card[1]);
+  const img = $('.ms-img', sheet);
+  img.classList.remove('loaded');
+  img.onload = () => img.classList.add('loaded');
+  img.src = thumbUrl(m);
+  $('.ms-world', sheet).innerHTML = `${icon(T.icon)}<span>${esc(m.n <= 2 ? 'Training' : T.name)} · Map ${m.n}</span>`;
+  $('.sheet-title', sheet).textContent = m.name;
+  $('.ms-tags', sheet).innerHTML = `<span class="ms-tag">${pips(m.tier)}<b>${esc(m.difficulty)}</b></span>`
+    + `<span class="ms-tag">${icon(WX.icon)}<b>${esc(WX.name)}</b></span>`;
+  const tile = (ic, v, label) => `<div class="ms-stat">${icon(ic)}<b>${v}</b><small>${label}</small></div>`;
+  $('.ms-stats', sheet).innerHTML = tile('target', st.gates, 'Gates')
+    + tile('star', st.stars, 'Stars')
+    + tile('ruler', (st.len / 1000).toFixed(1) + ' km', 'Length')
+    + tile('award', best ? fmt(best.score) : '—', 'Your best');
+  $('.ms-hazards', sheet).innerHTML = st.hazards.map((h) => `<span class="chip">${esc(h)}</span>`).join('');
+  sheet.classList.remove('hidden');
   panel.style.animation = 'none'; void panel.offsetWidth; panel.style.animation = '';
 }
 
@@ -484,11 +575,14 @@ function renderLobby() {
   const list = $('#lobby-maps');
   list.innerHTML = '';
   for (const m of MAPS.filter((x) => x.available)) {
-    const el = mapCard(m, { selected: m.id === app.levelId });
+    const el = mapCard(m, { selected: m.id === app.levelId, compact: true });
     if (app.isHost) el.onclick = () => { sfx.click(); app.levelId = m.id; app.net && app.net.send({ t: 'level', level: m.id }); renderLobby(); };
     else el.style.cursor = 'default';
     list.appendChild(el);
   }
+  // den valda kartan syns mitt i raden
+  const sel = $('.map-card.selected', list);
+  if (sel) list.scrollLeft = sel.offsetLeft - list.offsetLeft - (list.clientWidth - sel.offsetWidth) / 2;
   $('#btn-start').disabled = !(app.isHost && app.friendName && app.net && app.net.connected);
 }
 

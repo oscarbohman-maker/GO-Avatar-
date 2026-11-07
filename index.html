@@ -37,10 +37,10 @@
     <div class="menu-wrap wide">
       <header class="screen-head">
         <button class="btn icon back" data-back="screen-home" aria-label="Back" data-icon="back"></button>
-        <h2>Free Play</h2>
-        <span class="head-note">Pick a map</span>
+        <div class="head-title"><h2>Free Play</h2><span class="head-sub">20 maps · 6 worlds</span></div>
+        <div id="fp-progress" class="fp-progress"></div>
       </header>
-      <div id="map-grid" class="map-grid"></div>
+      <div id="map-grid" class="worlds"></div>
     </div>
   </section>
 
@@ -273,8 +273,18 @@
 
   <!-- Val av roll i Free Play -->
   <div id="mode-sheet" class="overlay sheet hidden">
-    <div class="panel sheet-panel">
-      <h2 class="sheet-title">Canyon Loop</h2>
+    <div class="panel sheet-panel map-sheet" role="dialog" aria-modal="true" aria-labelledby="ms-title">
+      <div class="ms-hero">
+        <img class="ms-img" alt="">
+        <button class="ms-close" aria-label="Close" data-icon="close"></button>
+        <div class="ms-hero-info">
+          <span class="ms-world"></span>
+          <h2 class="sheet-title" id="ms-title">Canyon Loop</h2>
+          <div class="ms-tags"></div>
+        </div>
+      </div>
+      <div class="ms-stats"></div>
+      <div class="ms-hazards"></div>
       <p class="sheet-sub">Choose your role</p>
       <button class="mode-opt" data-mode="npc" data-sfx>
         <span class="mode-ico" data-icon="plane"></span>

@@ -18,16 +18,25 @@ Båda figurerna syns i cockpiten. Pilotens händer följer ratten och gasreglage
 
 ## Kartorna
 
-1. *Canyon Loop* och 2. *Training Flight* är handgjorda övningsbanor. Kartorna 3–20 byggs av faser längs en slingrande korridor:
+Kartorna är ordnade i sju världar, och varje värld har sin egen miljö, sina egna färger och sitt eget väder. *Canyon Loop* och *Training Flight* är handgjorda övningsbanor. Kartorna 3–20 byggs av faser längs en slingrande korridor:
 
-| Kartor | Värld | Nytt |
+| Kartor | Värld | Miljö och väder |
 | --- | --- | --- |
-| 3–6 | Skog | slalom runt pelare, upp och ner, väggar med hål, lågt tak |
-| 7–10 | Berg | klippväggar, skarpa svängar (bromsa!), fallande stenar |
-| 11–14 | Stormskog | regn, dimma och vindbyar som knuffar planet |
-| 15–20 | Stormberg | blixtar och åska, sicksack mellan pelare, snabba undanmanövrar |
+| 1–2 | Training | övningskanjon och öppen äng |
+| 3–5 | Forest | granväggar, slalom, upp och ner, väggar med hål; klart väder och bris |
+| 6–8 | Desert | sandstensmesor, kaktusar, sanddyner; het vind och sandstorm |
+| 9–11 | Jungle | tät lövskog, buskar, tempelväggar; regn och åskstorm |
+| 12–14 | Red Rock | röda klippor, stenblock, stenras; vindbyar |
+| 15–17 | Arctic | isväggar, snödrivor, isblock; snöfall och snöstorm |
+| 18–20 | Lava | basalt, glödande lavasprickor och lavapölar, glödande lavabomber; eldregn och utbrott med blixtar |
+
+Svårigheten visas med 1–5 pluppar: Easy, Normal, Medium, Hard och Extreme.
 
 Ju högre nummer, desto fler portar och hinder, smalare korridor, skarpare svängar, större höjdskillnader, mindre hål, lägre tak, snabbare stenras och starkare vind. Fallande stenar syns som röda ringar på radarn och fylls när stenen är nere vid planets höjd. NPC-navigatören ropar "Rock ahead!" och "Falling rocks!".
+
+**Free Play** visar världarna med rubrik, och varje karta har ett kort med en miniatyrbild, svårighetspluppar, väder och ditt rekord. Väljer man en karta öppnas en detaljvy med stor bild, antal portar och stjärnor, banans längd, hindertyper och ditt rekord, och där väljer man roll. Lobbyn i *Play with Friends* använder samma kort.
+
+Miniatyrbilderna (`img/maps/*.jpg`) renderas med spelets egen 3D-motor. Om banorna ändras skapar man nya bilder så här: starta en webbserver (`python3 -m http.server 8080`) och kör `node tools/render-thumbs.cjs`, vilket kräver Playwright. Sidan `tools/thumbs.html` visar alla bilder.
 
 Kartorna är seedade, så båda spelarna får exakt samma bana. Varje karta har en förvald variant som testerna har flugit igenom, både med en skicklig pilot och med en blind pilot som bara följer NPC:ns röstorder.
 
@@ -68,12 +77,13 @@ Spelet består bara av statiska filer. Gå till **Settings → Pages → Deploy 
 
 ```
 index.html        Alla skärmar (start, free play, vänner, inställningar, lobby, spel)
-css/style.css     Blått tema, knappar, animationer
+css/style.css     Blått tema, knappar, kartkort, animationer
 js/main.js        Menyer, lägen, lobby, nätverksmeddelanden, HUD, resultat
 js/net.js         Anslutning med 6-teckenskod som går ut efter 24 h
 js/relay.js       Reservväg via MQTT-relä när direktanslutningen blockeras
 js/voice.js       Röstchatt
 js/levels.js      Kartlistan (20 platser) och banorna
+js/themes.js      Världarnas teman (färger, ljus, dekor) och väder
 js/physics.js     Flygmodell och kollisioner
 js/sim.js         Spelregler: poäng, perfect, stjärnor, krasch → omstart, mål
 js/crashfx.js     Kraschens effekter per hindertyp (partikelpool, skrot, brännmärke, blixt)
@@ -82,7 +92,7 @@ js/aipilot.js     AI-piloten som lyder navigatörens pilknappar
 js/models.js      Flygplan och cockpit (från reference/models.js)
 js/avatar.js      Figurerna: ansikte, kläder, IK och fjädrar
 js/rig.js         Planet i världen: cockpit, kabinskal, figurer, instrument
-js/world3d.js     3D-världen, dimma och stjärnor
+js/world3d.js     3D-världen per tema: mark, väggar, dekor, väder, dimma och stjärnor
 js/view3d.js      Kameror (cockpit, bakifrån, runtom)
 js/pilot.js       Pilotens vy
 js/nav3d.js       Navigatörens cockpitfönster
@@ -91,6 +101,8 @@ js/input.js       Tangentbord och pekskärm
 js/storage.js     Profil, inställningar och rekord
 js/sfx.js         Ljudeffekter
 tests/            Automatiska test
+img/maps/         Kartornas miniatyrbilder
+tools/            Verktyg för att rendera miniatyrbilderna
 ```
 
 ### Test
