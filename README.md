@@ -13,7 +13,7 @@ Båda figurerna syns i cockpiten. Pilotens händer följer ratten och gasreglage
   - **Pilot:** flyg blint, och en NPC-navigator pratar (engelsk röst), pekar och guidar dig.
   - **Navigator:** du ser allt och styr en blind AI-pilot. Håll **←/→** (knappar eller tangenter) för att svänga och **Shift** för att bromsa. Den håller höjden själv.
   - **Solo:** flyg själv med en liten karta i hörnet.
-- **Play with Friends:** den ena trycker *Create game* och får en **kod med 6 tecken**, och den andra skriver in koden eller öppnar länken från *Share link*. Koden gäller i **24 timmar**, även om man laddar om sidan, och går sedan ut.
+- **Play with Friends:** den ena trycker *Create game* och får en **ny kod med 6 tecken för varje party**. Den andra skriver in koden eller öppnar länken från *Share link*. Koden gäller i **24 timmar** och behålls om värden tappar anslutningen en stund. Om nätverken blockerar en direktanslutning (vanligt på olika mobilnät) går speldatan automatiskt via ett offentligt relä (MQTT över wss: broker.emqx.io eller broker.hivemq.com). Röstchatten fungerar då inte, så ring varandra i stället.
 - **Settings:** namn, invertera upp/ner, styrkänslighet, pekskärmskontroller (Auto/On/Off), ljudeffekter och NPC-röst.
 
 ## Regler och poäng
@@ -45,6 +45,7 @@ Spelet består bara av statiska filer. Gå till **Settings → Pages → Deploy 
 |---|---|
 | 3D | [three.js](https://threejs.org) r170 (`js/lib/`). Flygplan och cockpit är överförda exakt från `reference/models.js`. En sluten kabin är tillagd i `rig.js`. |
 | Online | WebRTC peer-to-peer via [PeerJS](https://peerjs.com) 1.5.4. Spelkoden blir ett peer-id på PeerJS gratis signalserver. |
+| Relä | Reservväg när WebRTC blockeras: [MQTT.js](https://github.com/mqttjs/MQTT.js) 5.10.1 (`js/lib/`) mot offentliga MQTT-servrar |
 | Röst | WebRTC-ljud över samma anslutning |
 | Sparning | `localStorage` (profil, inställningar, historik, rekord, värdens kod i 24 h) |
 
@@ -55,6 +56,7 @@ index.html        Alla skärmar (start, free play, vänner, inställningar, lobb
 css/style.css     Blått tema, knappar, animationer
 js/main.js        Menyer, lägen, lobby, nätverksmeddelanden, HUD, resultat
 js/net.js         Anslutning med 6-teckenskod som går ut efter 24 h
+js/relay.js       Reservväg via MQTT-relä när direktanslutningen blockeras
 js/voice.js       Röstchatt
 js/levels.js      Kartlistan (20 platser) och banorna
 js/physics.js     Flygmodell och kollisioner

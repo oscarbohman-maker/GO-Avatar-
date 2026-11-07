@@ -1,6 +1,7 @@
 // Nätverk: peer-to-peer via WebRTC (PeerJS). Värden får en kort kod,
 // vännen ansluter med koden. Ingen egen server behövs.
 /* global Peer */
+import { loadMqtt, relayBrokers, relayTopic, connectBroker, RelayConn } from './relay.js';
 
 export const PROTOCOL_VERSION = 2;
 const PREFIX = 'plaindodge-v2-';
@@ -23,16 +24,6 @@ export function normalizeCode(c) {
   return String(c || '').toUpperCase().replace(/[^A-Z0-9]/g, '').slice(0, CODE_LENGTH);
 }
 
-// Värdens kod sparas så att samma kod gäller i ett dygn (även om sidan laddas om).
-// Efter ett dygn går den ut och en ny kod skapas.
-export function loadHostCode(now = Date.now()) {
-  try {
-    const v = JSON.parse(localStorage.getItem(CODE_KEY) || 'null');
-    if (v && typeof v.code === 'string' && v.code.length === CODE_LENGTH && now - v.created < CODE_TTL_MS) return v;
-  } catch (_) {}
-  return null;
-}
-function saveHostCode(v) { try { localStorage.setItem(CODE_KEY, JSON.stringify(v)); } catch (_) {} }
 export function clearHostCode() { try { localStorage.removeItem(CODE_KEY); } catch (_) {} }
 
 // Möjlighet att peka på egen PeerJS-server, t.ex. ?peerHost=localhost&peerPort=9000&peerPath=/
@@ -72,7 +63,8 @@ const ERRORS = {
   'browser-incompatible': 'Your browser does not support WebRTC. Update Safari or try another browser.',
   'webrtc': 'Could not create a direct connection between you (WebRTC).',
 };
-const MSG_ICE_FAILED = 'Your devices found each other but could not connect – your networks block a direct connection. Try both on the same wifi, or switch one phone between wifi and mobile data.';
+const MSG_ICE_FAILED = 'Your devices found each other but could not connect, not even through the relay. Check that both have internet and try again.';
+const RELAY_AFTER_MS = 7000;   // byt till reläet om direktanslutningen inte öppnats efter så här lång tid
 const MSG_NO_HOST = "Could not reach your friend's game. Make sure the code is right and that your friend keeps Plain Dodge open on screen (not in the background).";
 
 export class Net {
@@ -100,15 +92,16 @@ export class Net {
 
   host(attempt = 0) {
     this.isHost = true;
-    const saved = this._forced || (attempt === 0 ? loadHostCode() : null);
+    // En ny kod för varje party. Vid återanslutning (_forced) behålls samma kod.
+    const saved = this._forced || null;
     this._forced = null;
     this.code = saved ? saved.code : randomCode();
     this.created = saved ? saved.created : Date.now();
     const peer = this._createPeer(PREFIX + this.code);
     this.peer = peer;
     peer.on('open', () => {
-      saveHostCode({ code: this.code, created: this.created });
       this.emit('code', this.code);
+      this._hostRelay();
     });
     peer.on('connection', (conn) => {
       if (this.expired) {
@@ -185,6 +178,91 @@ export class Net {
     }, wait);
   }
 
+  // ---------------------------------------------------------------- relä (reservväg)
+  // Värden lyssnar på reläet från början, så att en gäst som inte får en direktanslutning
+  // kan nå värden den vägen i stället.
+  async _hostRelay() {
+    if (this._relayStarted || this.closed) return;
+    this._relayStarted = true;
+    try { await loadMqtt(); } catch (e) { console.warn(e); return; }
+    const base = relayTopic(this.code);
+    this._relayClients = [];
+    for (const url of relayBrokers()) {
+      connectBroker(url).then((c) => {
+        if (this.closed) { c.end(true); return; }
+        this._relayClients.push(c);
+        c.subscribe(base + '/h');
+        c.on('message', (topic, buf) => {
+          let d; try { d = JSON.parse(buf.toString()); } catch (_) { return; }
+          if (!d || typeof d.sid !== 'string' || !d.m) return;
+          const m = d.m;
+          if (m.t === 'relay-hello') {
+            const reply = (msg) => c.publish(base + '/g', JSON.stringify({ sid: d.sid, m: msg }));
+            if (this.expired) { reply({ t: 'expired' }); return; }
+            if (this.conn && this.conn.open && !(this.conn.relay && this.conn.sid === d.sid)) { reply({ t: 'full' }); return; }
+            if (!(this.conn && this.conn.relay && this.conn.sid === d.sid)) {
+              // ingen öppen direktanslutning: använd reläet för den här gästen
+              try { if (this.conn && !this.conn.relay) this.conn.close(); } catch (_) {}
+              const rc = new RelayConn(c, base + '/g', d.sid);
+              this._bind(rc);
+              reply({ t: 'relay-ok' });
+              rc.markOpen();
+            } else reply({ t: 'relay-ok' });
+            return;
+          }
+          if (this.conn && this.conn.relay && this.conn.sid === d.sid) this.conn.deliver(m);
+        });
+      }).catch((e) => console.warn('relay', e.message));
+    }
+  }
+
+  // Gästen: direktanslutningen öppnades inte – gå via reläet
+  async _guestRelay() {
+    if (this._relayStarted || this.closed || this.connected) return;
+    this._relayStarted = true;
+    this.emit('status', 'relay');
+    try { await loadMqtt(); } catch (e) { this._relayFailed(); return; }
+    const base = relayTopic(this.code);
+    const sid = Math.random().toString(36).slice(2, 10);
+    let client = null;
+    for (const url of relayBrokers()) {
+      try { client = await connectBroker(url); break; } catch (e) { console.warn('relay', e.message); }
+      if (this.closed) return;
+    }
+    if (!client || this.closed || this.connected) { if (client) client.end(true); if (!client) this._relayFailed(); return; }
+    this._relayClients = [client];
+    let rc = null, hello = null;
+    client.subscribe(base + '/g');
+    client.on('message', (topic, buf) => {
+      let d; try { d = JSON.parse(buf.toString()); } catch (_) { return; }
+      if (!d || d.sid !== sid || !d.m) return;
+      if (d.m.t === 'relay-ok' && !rc) {
+        clearInterval(hello);
+        if (this.connected) return;                        // direktanslutningen hann öppnas
+        try { if (this.conn && !this.conn.relay) this.conn.close(); } catch (_) {}
+        rc = new RelayConn(client, base + '/h', sid);
+        this._bind(rc);
+        rc.markOpen();
+        return;
+      }
+      if (d.m.t === 'full' || d.m.t === 'expired') { clearInterval(hello); }
+      if (rc) rc.deliver(d.m);
+      else if (d.m.t === 'full' || d.m.t === 'expired') this.emit('message', d.m);
+    });
+    const send = () => client.publish(base + '/h', JSON.stringify({ sid, m: { t: 'relay-hello' } }));
+    send();
+    hello = setInterval(() => { if (this.closed || rc) { clearInterval(hello); return; } send(); }, 1500);
+  }
+
+  _relayFailed() {
+    if (this._errored || this.closed || this.connected) return;
+    this._errored = true;
+    clearTimeout(this._joinDeadline);
+    this.emit('error', MSG_ICE_FAILED);
+  }
+
+  get relay() { return !!(this.conn && this.conn.relay); }
+
   // Millisekunder kvar tills koden går ut
   get expiresIn() { return this.created ? this.created + CODE_TTL_MS - Date.now() : CODE_TTL_MS; }
 
@@ -208,11 +286,11 @@ export class Net {
       if (this.closed || this.connected || this._errored) return;
       this._errored = true;
       this.emit('error', !peer.open ? ERRORS.network
-        : this._iceFailed ? MSG_ICE_FAILED
-        : this._sawHost ? MSG_ICE_FAILED : MSG_NO_HOST);
-    }, 40000);
+        : this._iceFailed || this._sawHost ? MSG_ICE_FAILED : MSG_NO_HOST);
+    }, 45000);
     peer.on('open', () => this._tryConnect());
     peer.on('error', (err) => {
+      if (err.type === 'peer-unavailable') clearTimeout(this._relayT);   // värden finns inte – inget relä
       if (err.type === 'peer-unavailable' && this._joinTries < 4 && !this.closed) {
         // värden finns inte (just nu) – vänta och försök igen
         this.emit('status', 'retry');
@@ -229,14 +307,19 @@ export class Net {
     if (this.closed || this.connected || this._errored) return;
     this._joinTries++;
     this.emit('status', 'finding');
+    // öppnas ingen direktanslutning alls (inte ens ett försök) går vi via reläet efter en stund
+    clearTimeout(this._relayT);
+    this._relayT = setTimeout(() => this._guestRelay(), RELAY_AFTER_MS + 2000);
     const conn = this.peer.connect(PREFIX + this.code, { reliable: true, serialization: 'json' });
     this._bind(conn);
     conn.on('iceStateChanged', (st) => {
-      if (st === 'checking') { this._sawHost = true; this.emit('status', 'linking'); }
-      if (st === 'failed' && !conn.open) {
-        this._iceFailed = true;
-        if (!this._errored && !this.closed) { this._errored = true; clearTimeout(this._joinDeadline); this.emit('error', MSG_ICE_FAILED); }
+      if (st === 'checking') {
+        this._sawHost = true; this.emit('status', 'linking');
+        // värden finns – öppnas inte direktanslutningen snart går vi via reläet
+        clearTimeout(this._relayT);
+        this._relayT = setTimeout(() => this._guestRelay(), RELAY_AFTER_MS);
       }
+      if (st === 'failed' && !conn.open) { this._iceFailed = true; this._guestRelay(); }
     });
   }
 
@@ -291,7 +374,9 @@ export class Net {
     clearInterval(this._hb);
     clearTimeout(this._rt);
     clearTimeout(this._joinDeadline);
+    clearTimeout(this._relayT);
     if (this._vis) document.removeEventListener('visibilitychange', this._vis);
+    (this._relayClients || []).forEach((c) => { try { c.end(true); } catch (_) {} });
     try { this.conn && this.conn.close(); } catch (_) {}
     try { this.peer && this.peer.destroy(); } catch (_) {}
     this.handlers = {};

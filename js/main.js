@@ -270,13 +270,17 @@ function wireNet(net) {
         finding: `Looking for game ${net.code}...`,
         retry: `Game ${net.code} not found yet – trying again...`,
         linking: 'Found your friend! Connecting...',
+        relay: 'Direct connection blocked by the network – connecting through the relay...',
       };
       if (T[st]) setStatus($('#friends-status'), T[st]);
     }
   });
   net.on('open', () => {
     if (app.net !== net) return;
-    setupVoice();
+    // Via reläet fungerar inte röstchatten (den kräver en direktanslutning)
+    if (net.relay) {
+      app._relayNote = 'Connected through the relay – in-game voice chat is not available, call each other instead.';
+    } else { app._relayNote = ''; setupVoice(); }
     if (!app.isHost) net.send({ t: 'hello', name: myName(), ver: PROTOCOL_VERSION });
   });
 }
@@ -365,7 +369,7 @@ function onMessage(m) {
       if (!app.isHost) return;
       app.friendName = String(m.name || 'Friend').slice(0, 16);
       if (m.ver !== PROTOCOL_VERSION) setStatus($('#lobby-status'), 'Warning: your friend has a different version of the game. Reload the page.', 'error');
-      else setStatus($('#lobby-status'), app.friendName + ' joined!', 'ok');
+      else setStatus($('#lobby-status'), app.friendName + ' joined!' + (app._relayNote ? ' ' + app._relayNote : ''), 'ok');
       app.net.send({ t: 'welcome', name: myName(), hostRole: app.hostRole, level: app.levelId, ver: PROTOCOL_VERSION });
       renderLobby();
       break;
@@ -375,7 +379,7 @@ function onMessage(m) {
       app.levelId = LEVEL_INFO[m.level] ? m.level : 'test';
       $('#lobby-code').textContent = app.net.code;
       $('#code-expiry').textContent = '';
-      setStatus($('#lobby-status'), m.ver !== PROTOCOL_VERSION ? 'Warning: different game versions. Reload the page.' : 'Connected to ' + app.friendName + '!', m.ver !== PROTOCOL_VERSION ? 'error' : 'ok');
+      setStatus($('#lobby-status'), m.ver !== PROTOCOL_VERSION ? 'Warning: different game versions. Reload the page.' : 'Connected to ' + app.friendName + '!' + (app._relayNote ? ' ' + app._relayNote : ''), m.ver !== PROTOCOL_VERSION ? 'error' : 'ok');
       renderLobby();
       show('screen-lobby');
       break;
@@ -383,9 +387,11 @@ function onMessage(m) {
       friendLost(app.net, true);
       break;
     case 'full':
+      if (app.isHost) break;
       goHome('The game is already full (two players).', 'error', 'screen-friends');
       break;
     case 'expired':
+      if (app.isHost) break;
       goHome('That code has expired. Ask your friend to create a new game.', 'error', 'screen-friends');
       break;
     case 'roles':
