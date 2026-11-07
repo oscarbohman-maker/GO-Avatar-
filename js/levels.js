@@ -89,6 +89,12 @@ function scaleLevel(L, S) {
   L.rocks.forEach((o) => k(o, ['x', 'z', 'r', 'h']));
   L.boxes.forEach((b) => k(b, ['x', 'y', 'z', 'hx', 'hy', 'hz']));
   L.zones.forEach((zn) => k(zn, ['x', 'z']));
+  (L.movers || []).forEach((m) => k(m, ['x', 'z', 'r', 'top', 'bottom']));
+  [...L.rocks, ...(L.movers || [])].forEach((o) => { if (o.lane) { o.lane.lat *= S; o.lane.W *= S; } });
+  if (L.halfW) L.halfW *= S;
+  if (L.halfs) L.halfs = L.halfs.map((h) => h * S);
+  (L.decorRocks || []).forEach((o) => k(o, ['x', 'z', 'r', 'h']));
+  (L.stars || []).forEach((st) => k(st, ['x', 'y', 'z']));
   L.path = L.path.map((p) => p.map((v) => v * S));
   k(L.bounds, ['minX', 'maxX', 'minZ', 'maxZ']);
   L.ceiling *= S;
@@ -228,7 +234,7 @@ function buildDemo() {
 // Väggar längs en slingrande rutt (kanjon). Insidan av väggarna följer rutten
 // på avståndet halfWidths[i] från mittlinjen, och hörnen sluts med gering (miter)
 // så att det aldrig blir glipor eller väggar som sticker in i korridoren.
-function canyonWalls(path, halfWidths, wallH, thick = 1.5, extend = 25, kind = 'canyon', decor = null, rand = null) {
+function canyonWalls(path, halfWidths, wallH, thick = 1.5, extend = 25, kind = 'canyon', decor = null, rand = null, steps = false) {
   const boxes = [];
   const segs = [];
   for (let i = 0; i < path.length - 1; i++) {
@@ -247,6 +253,8 @@ function canyonWalls(path, halfWidths, wallH, thick = 1.5, extend = 25, kind = '
       const p2 = off(j, path[j]), d2 = segs[j].d;
       const den = d1[0] * d2[1] - d1[1] * d2[0];
       if (Math.abs(den) < 1e-4) { pts.push(p2); continue; }
+      // olika bredd på sträckorna: ett trappsteg i stället för gering (annars kan skärningen hamna långt bort)
+      if (steps && Math.abs(halfWidths[j - 1] - halfWidths[j]) > 1e-6) { pts.push(p1, p2); continue; }
       const t = ((p2[0] - p1[0]) * d2[1] - (p2[1] - p1[1]) * d2[0]) / den;
       pts.push([p1[0] + d1[0] * t, p1[1] + d1[1] * t]);
     }
@@ -364,17 +372,238 @@ function addStars(level) {
   level.stars = stars;
 }
 
+// ---------------------------------------------------------------- kartor 3–20 (genererade)
+// Varje karta byggs av faser längs en slingrande korridor. Svårigheten d (0..1) styr:
+// smalare korridor, skarpare svängar, fler och närmare hinder, mer höjdskillnad,
+// lägre tak, mindre hål, fler fallande stenar och mer storm.
+// Allt är seedat, så båda spelarna får exakt samma bana.
+export const GEN_MAPS = [
+  // [nummer, namn, tema, variant] – varianten är ett förvalt frö som är provflugen (tests/sim.test.mjs)
+  [3, 'Pine Valley', 'forest', 0], [4, 'Hill Hopper', 'forest', 0], [5, 'Window Woods', 'forest', 0], [6, 'Low Roof Forest', 'forest', 1],
+  [7, 'Mountain Pass', 'mountain', 0], [8, 'Boulder Gorge', 'mountain', 28], [9, 'Rockfall Run', 'mountain', 3], [10, 'Granite Gates', 'mountain', 12],
+  [11, 'Rainy Pines', 'storm-forest', 0], [12, 'Gale Forest', 'storm-forest', 0], [13, 'Storm Slalom', 'storm-forest', 2], [14, 'Thunder Woods', 'storm-forest', 0],
+  [15, 'Thunder Canyon', 'storm-mountain', 1], [16, 'Avalanche Alley', 'storm-mountain', 11], [17, 'Lightning Ridge', 'storm-mountain', 7],
+  [18, 'Eye of the Storm', 'storm-mountain', 3], [19, 'Doom Gorge', 'storm-mountain', 15], [20, 'The Gauntlet', 'storm-mountain', 1],
+];
+
+// Vilka faser som finns från vilken svårighet
+const FEATURES = [
+  { f: 'slalom', from: 0 }, { f: 'updown', from: 0 }, { f: 'window', from: 0.1 },
+  { f: 'roof', from: 0.15 }, { f: 'hairpin', from: 0.25 }, { f: 'rockfall', from: 0.3 }, { f: 'zigzag', from: 0.45 },
+];
+
+// Fönstervägg tvärs över korridoren (lokalt x = åt höger, z = framåt) med ett fyrkantigt hål
+function crossWall(boxes, cx, cz, yaw, halfW, height, holeY, holeHalf, kind) {
+  const rx = Math.cos(yaw), rz = -Math.sin(yaw);        // planets "höger" för den här riktningen
+  const t = 1;                                          // halv tjocklek
+  const side = (halfW + 3 - holeHalf) / 2;              // bredd på väggbitarna vid sidan av hålet
+  const put = (lx, y, hx, hy) => boxes.push({ x: cx + rx * lx, y, z: cz + rz * lx, hx, hy, hz: t, yaw, kind });
+  put(-(holeHalf + side), height / 2, side, height / 2);
+  put(holeHalf + side, height / 2, side, height / 2);
+  const below = holeY - holeHalf;
+  if (below > 0.2) put(0, below / 2, holeHalf, below / 2);
+  const above = height - (holeY + holeHalf);
+  if (above > 0.2) put(0, holeY + holeHalf + above / 2, holeHalf, above / 2);
+}
+
+function buildGenerated(n, name, theme, variant = 0) {
+  const S = WORLD_SCALE;
+  const d = Math.max(0, Math.min(1, (n - 3) / 17));
+  const rand = mulberry32(9100 + n * 131 + variant * 7919);
+  const R = (a, b) => a + rand() * (b - a);
+  const mountain = theme.includes('mountain');
+  const storm = theme.startsWith('storm');
+  const H0 = 15;
+  const nG = 10 + Math.round(d * 8);
+  const halfW = 11 - 1.2 * d;                           // korridorens halva bredd (oskalad; ×2 i världen)
+  const gateR = 6 - 1.1 * d;
+
+  // 1) välj fas per sträcka (första sträckan är lugn, sista leder in i målet)
+  const pool = FEATURES.filter((x) => d >= x.from).map((x) => x.f);
+  const feats = [];
+  for (let i = 0; i < nG; i++) {
+    if (i === 0 || i === nG - 1 || rand() < 0.28 - 0.2 * d) { feats.push('none'); continue; }
+    // ingen skarp sväng direkt efter ett hinder (man ligger då ofta långt ut åt sidan)
+    const dodge = (x) => x === 'slalom' || x === 'zigzag' || x === 'rockfall';
+    let f; do { f = pool[(rand() * pool.length) | 0]; } while ((f === feats[i - 1] && pool.length > 1 && f !== 'slalom') || (f === 'hairpin' && dodge(feats[i - 1])));
+    feats.push(f);
+  }
+
+  // 2) höjder: fönster och tak kräver en viss höjd, upp/ner växlar; sedan begränsas lutningen
+  const alt = new Array(nG).fill(H0);
+  let flip = rand() < 0.5 ? 1 : -1;
+  const holeHalf = 5.4 - 0.9 * d, roofY = 12.5 - 2 * d;
+  for (let i = 0; i < nG; i++) {
+    const f = feats[i];
+    if (f === 'updown' || f === 'window') { flip = -flip; alt[i] = H0 + flip * R(3, 4.5 + 2 * d); }
+    else if (f === 'roof') alt[i] = roofY - 5.2;
+    else alt[i] = H0 + R(-1.5, 1.5);
+    alt[i] = Math.max(6.5, Math.min(22, alt[i]));
+  }
+  // Fönster och tak har låsta höjder. Porten före ett tak läggs lågt (så att man hinner ner),
+  // och övriga höjder jämnas ut så att två portar i rad skiljer högst MAXD.
+  const MAXD = 4.6;                                     // största höjdskillnad mellan två portar
+  const fixed = feats.map((f) => f === 'roof' || f === 'window');
+  for (let i = 1; i < nG; i++) {
+    if (fixed[i - 1]) continue;
+    if (feats[i] === 'roof') { alt[i - 1] = Math.min(alt[i - 1], alt[i] + 2.5); fixed[i - 1] = true; }
+    if (feats[i] === 'window') { alt[i - 1] = Math.max(alt[i] - 3, Math.min(alt[i] + 3, alt[i - 1])); fixed[i - 1] = true; }
+  }
+  for (let pass = 0; pass < 6; pass++) {
+    for (let i = nG - 1; i > 0; i--) if (!fixed[i - 1]) alt[i - 1] = Math.max(alt[i] - MAXD, Math.min(alt[i] + MAXD, alt[i - 1]));
+    let prev = H0;
+    for (let i = 0; i < nG; i++) {
+      if (!fixed[i]) alt[i] = Math.max(prev - MAXD, Math.min(prev + MAXD, alt[i]));
+      prev = alt[i];
+    }
+  }
+
+  // 3) rutten: kurs inom ±1 rad från rakt fram, så att banan aldrig korsar sig själv
+  const start = [0, H0, 0];
+  const path = [start];
+  let heading = 0, x = 0, z = 0;
+  for (let i = 0; i < nG; i++) {
+    const f = feats[i];
+    let turn = (rand() * 2 - 1) * (0.22 + 0.42 * d);
+    if (f === 'hairpin') turn = (rand() < 0.5 ? -1 : 1) * (0.55 + 0.35 * d);           // skarp sväng (bromsa!)
+    if (i === 0) turn *= 0.3;
+    if (f === 'window' || f === 'roof') turn *= 0.35;                                    // raka in mot fönster och tak
+    if (f === 'slalom' || f === 'zigzag' || f === 'rockfall') turn *= 0.5;              // väj, inte sväng samtidigt
+    heading = Math.max(-1, Math.min(1, heading + turn));
+    // sträckor med hinder är längre: tid att väja ut och sedan tillbaka till mitten före nästa port
+    const L = f === 'slalom' || f === 'zigzag' || f === 'rockfall' ? R(84, 96) : R(62, 76);
+    x += -Math.sin(heading) * L; z += -Math.cos(heading) * L;
+    path.push([x, alt[i], z]);
+  }
+
+  const gates = [];
+  for (let i = 0; i < nG; i++) {
+    const p = path[i + 1], prev = path[i], next = path[i + 2] || null;
+    let dx, dz;
+    if (feats[i] === 'window' || feats[i] === 'roof') { dx = p[0] - prev[0]; dz = p[2] - prev[2]; }   // pekar längs sträckan
+    else if (next) { dx = next[0] - prev[0]; dz = next[2] - prev[2]; }
+    else { dx = p[0] - prev[0]; dz = p[2] - prev[2]; }
+    let r = gateR;
+    if (feats[i] === 'window') r = Math.min(r, holeHalf - 0.7);
+    gates.push({ idx: i, x: p[0], y: p[1], z: p[2], r, tube: 0.35, yaw: yawFromDir(dx, dz), finish: i === nG - 1 });
+  }
+
+  // 4) väggar längs korridoren (skog eller klippor)
+  // korridoren är bredare där det står hinder (plats att väja), smalare annars
+  const BULGE = 3.5;
+  const half = feats.map((f) => (f === 'slalom' || f === 'zigzag' || f === 'rockfall' ? halfW + BULGE : halfW));
+  const decor = [];
+  const boxes = canyonWalls(path, half, 50, 1.5, 25, mountain ? 'cliffwall' : 'treewall', decor, rand, true);
+  // dekor (syns men krockas inte med) får aldrig hamna inne i korridoren, inte ens där den är bredare
+  const outside = (t) => {
+    for (let i = 0; i < path.length - 1; i++) {
+      if (distToSegment2(t.x, t.z, path[i][0], path[i][2], path[i + 1][0], path[i + 1][2]) < half[i] - 0.4) return false;
+    }
+    return true;
+  };
+  const decorTrees = mountain ? [] : decor.filter(outside);
+  const decorRocks = mountain
+    ? decor.filter(outside).map((t) => ({ x: t.x, z: t.z, r: t.baseR * 1.15, h: t.h * (1.1 + rand() * 0.6) }))
+    : [];
+
+  // 5) hinder per fas
+  const rocks = [], movers = [], zones = [], stars = [], centers = [];
+  const at = (i, t, lat) => {
+    const a = path[i], b = path[i + 1];
+    const dx = b[0] - a[0], dz = b[2] - a[2], L = Math.hypot(dx, dz);
+    const rx = -dz / L, rz = dx / L;                    // höger
+    return { x: a[0] + dx * t + rx * lat, y: a[1] + (b[1] - a[1]) * t, z: a[2] + dz * t + rz * lat, yaw: yawFromDir(dx, dz), L };
+  };
+  const pillarR = 1.25 + 0.25 * d;
+  // Pelaren ska blockera mitten men lämna en passage på andra sidan som är minst
+  // planets vingbredd (6.6) + 2.8 i marginal (oskalade enheter)
+  const wObs = halfW + BULGE;
+  const minOff = Math.max(0.8, 9.4 - wObs + pillarR), maxOff = Math.max(minOff, Math.min(3.4, pillarR + 2.2));
+  let side = rand() < 0.5 ? 1 : -1;
+  for (let i = 0; i < nG; i++) {
+    const f = feats[i];
+    if (f === 'slalom' || f === 'zigzag') {
+      // pelarna står minst ~60 m isär (tid att väja från ena sidan till andra)
+      // flera pelare i samma sträcka står på samma sida (en lång undanmanöver);
+      // sidan byts mellan sträckorna, så att det blir tid att svänga över
+      const ts = f === 'zigzag' || d > 0.5 ? [0.46, 0.62] : [0.52];
+      side = -side;
+      ts.forEach((t) => {
+        const lat = side * R(minOff, maxOff);
+        const p = at(i, t, lat);
+        rocks.push({ x: p.x, z: p.z, r: pillarR, h: 50, lane: { seg: i, t, lat, W: wObs } });
+      });
+      const m = at(i, 0.5, 0);
+      zones.push({ type: f === 'zigzag' ? 'Zigzag' : 'Slalom', x: m.x, z: m.z, note: `${ts.length} pillar${ts.length > 1 ? 's' : ''}` });
+    } else if (f === 'window') {
+      const p = at(i, 0.78, 0);
+      crossWall(boxes, p.x, p.z, p.yaw, halfW, 50, alt[i], holeHalf, mountain ? 'rockwall' : 'wall');
+      centers.push({ seg: i, t: 0.78 });                  // genom hålet: mitt i banan
+      zones.push({ type: 'Wall', x: p.x, z: p.z, note: `Hole at ${Math.round(alt[i] * S)} m` });
+    } else if (f === 'roof') {
+      const p = at(i, 0.78, 0);
+      const len = p.L * 0.38;                           // taket börjar efter 60 % av sträckan
+      boxes.push({ x: p.x, y: roofY + 1, z: p.z, hx: halfW + 3, hy: 1, hz: len / 2, yaw: p.yaw, kind: mountain ? 'rockroof' : 'roof' });
+      zones.push({ type: 'Low roof', x: p.x, z: p.z, note: `Stay under ${Math.round(roofY * S)} m` });
+    } else if (f === 'hairpin') {
+      const m = at(i, 0.5, 0);
+      zones.push({ type: 'Hairpin', x: m.x, z: m.z, note: 'Brake!' });
+    } else if (f === 'rockfall') {
+      const ts = d > 0.55 ? [0.46, 0.62] : [0.52];
+      side = -side;
+      for (const t of ts) {
+        const lat = side * R(minOff, maxOff);
+        const p = at(i, t, lat);
+        movers.push({ x: p.x, z: p.z, r: 1.6 + 0.3 * d, top: 34, bottom: -2, period: R(2.2, 2.8) - 0.5 * d, phase: R(0, 3), lane: { seg: i, t, lat, W: wObs } });
+      }
+      const m = at(i, 0.5, 0);
+      zones.push({ type: 'Rockfall', x: m.x, z: m.z, note: 'Falling rocks!' });
+    }
+    // stjärna strax efter varje port (där det är fritt), och en till på lugna sträckor
+    const s1 = at(i, 0.16, 0);
+    stars.push({ idx: stars.length, x: s1.x, y: s1.y, z: s1.z });
+    if (f === 'none' || f === 'updown') { const s2 = at(i, 0.6, 0); stars.push({ idx: stars.length, x: s2.x, y: s2.y, z: s2.z }); }
+  }
+
+  const xs = path.map((p) => p[0]), zs = path.map((p) => p[2]);
+  const bounds = { minX: Math.min(...xs) - 30, maxX: Math.max(...xs) + 30, minZ: Math.min(...zs) - 30, maxZ: Math.max(...zs) + 30 };
+  let len = 0;
+  for (let i = 0; i < path.length - 1; i++) len += Math.hypot(path[i + 1][0] - path[i][0], path[i + 1][2] - path[i][2]);
+  const weather = storm ? { rain: true, lightning: d > 0.45, wind: { dir: rand() * Math.PI * 2, strength: 1.5 + 3 * d } } : null;
+  return scaleLevel({
+    id: 'm' + n,
+    name,
+    par: Math.round(len * S / 38) + 6,
+    start: { x: start[0], y: start[1], z: start[2], yaw: yawFromDir(path[1][0] - start[0], path[1][2] - start[2]) },
+    gates, trees: [], decor: decorTrees, decorRocks, rocks, movers, boxes, zones, path, bounds, stars, weather,
+    theme,
+    halfW,
+    halfs: half.slice(),                                // korridorens halva bredd per sträcka
+    centers,
+    ceiling: 50,
+    fog: storm ? { color: 0x8592a0, near: 18, far: 85 } : { color: 0xaec3d3, near: 20, far: 90 },
+    pilotFog: storm ? { color: 0x7d8896, near: 0, far: 40 - 6 * d } : null,
+    penalties: { crash: 3, miss: 5 },
+  }, S);
+}
+
 const builders = { test: buildTest, demo: buildDemo };
+for (const row of GEN_MAPS) {
+  const [n, name, theme] = row;
+  builders['m' + n] = () => buildGenerated(n, name, theme, row[3] || 0);
+  Object.assign(MAPS[n - 1], { id: 'm' + n, name, available: true, theme });
+  LEVEL_INFO['m' + n] = { id: 'm' + n, name, world: theme, difficulty: MAPS[n - 1].difficulty };
+}
 
 export function buildLevel(id) {
   const b = builders[id];
   if (!b) throw new Error('Unknown level: ' + id);
   const level = b();
-  addStars(level);
+  if (!level.stars) addStars(level);
   level.decor = level.decor || [];
   // Pilotens sikt i cockpiten: mycket tät, ljusgrå dimma som börjar direkt
   // (helt tät vid ca 44 m, träden vid sidorna ~20 m bort är halvt dolda)
-  level.pilotFog = { color: 0xc6ced6, near: 0, far: 44 };
+  level.pilotFog = level.pilotFog || { color: 0xc6ced6, near: 0, far: 44 };
   level._grid = buildGrid(level);
   return level;
 }

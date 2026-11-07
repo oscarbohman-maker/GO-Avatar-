@@ -47,6 +47,7 @@ export class NavCockpit {
       ix: L(a.ix || 0, b.ix || 0), iy: L(a.iy || 0, b.iy || 0), throttle: b.th || 0,
       accLong: L(a.al || 0, b.al || 0), loadN: L(a.ln || 1, b.ln || 1), rollAcc: L(a.ra || 0, b.ra || 0),
       phase: b.ph, cd: L(a.cd || 0, b.cd || 0), ng: b.ng,
+      ft: (b.ft || 0) < (a.ft || 0) ? b.ft || 0 : L(a.ft || 0, b.ft || 0),   // flygtiden (för fallande stenar)
     };
   }
 

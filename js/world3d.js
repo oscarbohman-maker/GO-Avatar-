@@ -1,5 +1,6 @@
 // Banans 3D-värld: mark, träd, klippor, väggar, portar och navigatörens rutt.
 import * as THREE from './lib/three.module.min.js';
+import { moverY } from './physics.js';
 
 function groundTexture() {
   const c = document.createElement('canvas');
@@ -38,9 +39,12 @@ export class World3D {
     scene.fog = new THREE.Fog(this.fogA.color.clone(), this.fogA.near, this.fogA.far);
     this.maxFar = Math.max(this.fogA.far, this.fogB.far);
 
-    // dagsljus
-    scene.add(new THREE.HemisphereLight(0xdfeeff, 0x3a5a2c, 1.9));
-    const sun = new THREE.DirectionalLight(0xfff2d6, 2.1);
+    // dagsljus (mörkare och kallare i storm)
+    const storm = !!(L.weather && L.weather.rain);
+    this.hemi = new THREE.HemisphereLight(storm ? 0xb8c4d2 : 0xdfeeff, storm ? 0x2c3a2a : 0x3a5a2c, storm ? 1.25 : 1.9);
+    this.hemiBase = this.hemi.intensity;
+    scene.add(this.hemi);
+    const sun = new THREE.DirectionalLight(storm ? 0xc8d2de : 0xfff2d6, storm ? 0.9 : 2.1);
     sun.position.set(40, 80, 30);
     scene.add(sun);
 
@@ -90,14 +94,55 @@ export class World3D {
       scene.add(rocks);
     }
 
+    // klippväggar: tätt packade, kantiga klippspiror (krocken räknas mot den osynliga väggen bakom)
+    const dr = L.decorRocks || [];
+    if (dr.length) {
+      const g = new THREE.CylinderGeometry(0.45, 1, 1, 6, 2); g.translate(0, 0.5, 0);
+      // gör spirorna lite skeva så att de inte ser likadana ut
+      const pa = g.attributes.position;
+      for (let i = 0; i < pa.count; i++) {
+        const y = pa.getY(i);
+        if (y > 0.01 && y < 0.99) { pa.setX(i, pa.getX(i) * (0.85 + 0.3 * Math.abs(Math.sin(i * 7.3)))); pa.setZ(i, pa.getZ(i) * (0.85 + 0.3 * Math.abs(Math.cos(i * 3.1)))); }
+      }
+      g.computeVertexNormals();
+      const spires = new THREE.InstancedMesh(g, new THREE.MeshLambertMaterial({ color: 0xffffff, flatShading: true }), dr.length);
+      dr.forEach((o, i) => {
+        const v = ((Math.sin(o.x * 12.9898 + o.z * 78.233) * 43758.5453) % 1 + 1) % 1;
+        q.setFromAxisAngle(new THREE.Vector3(0, 1, 0), v * 6.28);
+        m.compose(pos.set(o.x, 0, o.z), q, scl.set(o.r, o.h, o.r));
+        spires.setMatrixAt(i, m);
+        spires.setColorAt(i, col.setHSL(0.07 + v * 0.03, 0.12 + v * 0.08, (storm ? 0.3 : 0.36) + v * 0.1));
+      });
+      q.identity();
+      scene.add(spires);
+    }
+
+    // fallande stenblock: flyttas varje bildruta efter flygtiden (samma tid som simuleringen)
+    this.movers = L.movers || [];
+    if (this.movers.length) {
+      const g = new THREE.IcosahedronGeometry(1, 0);
+      this.moverMesh = new THREE.InstancedMesh(g, new THREE.MeshLambertMaterial({ color: 0x7a6e62, flatShading: true }), this.movers.length);
+      this.moverMesh.frustumCulled = false;
+      scene.add(this.moverMesh);
+      // mörk skugga på marken där stenen landar
+      const sg = new THREE.CircleGeometry(1, 20); sg.rotateX(-Math.PI / 2);
+      this.moverShadow = new THREE.InstancedMesh(sg, new THREE.MeshBasicMaterial({ color: 0x000000, transparent: true, opacity: 0.35, depthWrite: false }), this.movers.length);
+      this.moverShadow.frustumCulled = false;
+      scene.add(this.moverShadow);
+      this.setMoverTime(0);
+    }
+
+    const rockMat = new THREE.MeshLambertMaterial({ color: 0x7d7468, flatShading: true });
     const boxMats = {
       canyon: new THREE.MeshLambertMaterial({ color: 0x9b6b4a }),
       wall: new THREE.MeshLambertMaterial({ color: 0xa04a3a }),
       tunnel: new THREE.MeshLambertMaterial({ color: 0x5c5f66 }),
       roof: new THREE.MeshLambertMaterial({ color: 0x45484e }),
+      rockwall: rockMat,
+      rockroof: new THREE.MeshLambertMaterial({ color: 0x5f5850, flatShading: true }),
     };
     for (const b of L.boxes) {
-      if (b.kind === 'treewall') continue;   // syns som träd i stället
+      if (b.kind === 'treewall' || b.kind === 'cliffwall') continue;   // syns som träd / klippspiror i stället
       const mesh = new THREE.Mesh(new THREE.BoxGeometry(b.hx * 2, b.hy * 2, b.hz * 2), boxMats[b.kind] || boxMats.wall);
       mesh.position.set(b.x, b.y, b.z);
       mesh.rotation.y = b.yaw;
@@ -141,6 +186,97 @@ export class World3D {
     this.routeMat = new THREE.MeshBasicMaterial({ color: 0x4dd0ff, transparent: true, opacity: 0.45, depthWrite: false });
     this.routeGeo = new THREE.SphereGeometry(0.45, 8, 6);
     this.routeMesh = null;
+
+    // väder: regn (streck som följer kameran) och blixtar
+    this.weather = L.weather || null;
+    if (this.weather && this.weather.rain) this._makeRain();
+    this.flash = 0;
+    this.nextFlash = 4 + Math.random() * 6;
+    this.bgBase = null;
+  }
+
+  // Stenblocken där de är vid flygtiden t (s)
+  setMoverTime(t) {
+    if (!this.moverMesh) return;
+    const m = new THREE.Matrix4(), q = new THREE.Quaternion(), p = new THREE.Vector3(), s = new THREE.Vector3();
+    const e = new THREE.Euler();
+    this.movers.forEach((mv, i) => {
+      const y = moverY(mv, t);
+      const show = y > -mv.r;
+      e.set(t * 1.7 + i, t * 1.1 + i * 2, 0);
+      q.setFromEuler(e);
+      m.compose(p.set(mv.x, y, mv.z), q, s.setScalar(show ? mv.r : 0.0001));
+      this.moverMesh.setMatrixAt(i, m);
+      // skuggan växer och mörknar när stenen närmar sig marken
+      const k = Math.max(0, Math.min(1, 1 - y / mv.top));
+      m.compose(p.set(mv.x, 0.06, mv.z), q.identity(), s.setScalar(mv.r * (0.6 + 0.8 * k)));
+      this.moverShadow.setMatrixAt(i, m);
+    });
+    this.moverMesh.instanceMatrix.needsUpdate = true;
+    this.moverShadow.instanceMatrix.needsUpdate = true;
+  }
+
+  _makeRain() {
+    const N = 700;
+    this.rainN = N;
+    this.rainBox = { w: 70, h: 46 };
+    const pos = new Float32Array(N * 6);
+    this.rainDrops = new Float32Array(N * 3);
+    for (let i = 0; i < N; i++) {
+      this.rainDrops[i * 3] = (Math.random() - 0.5) * this.rainBox.w;
+      this.rainDrops[i * 3 + 1] = Math.random() * this.rainBox.h;
+      this.rainDrops[i * 3 + 2] = (Math.random() - 0.5) * this.rainBox.w;
+    }
+    const g = new THREE.BufferGeometry();
+    g.setAttribute('position', new THREE.BufferAttribute(pos, 3));
+    this.rain = new THREE.LineSegments(g, new THREE.LineBasicMaterial({ color: 0xc9d6e6, transparent: true, opacity: 0.55, depthWrite: false }));
+    this.rain.frustumCulled = false;
+    this.scene.add(this.rain);
+  }
+
+  _updateRain(dt, cam) {
+    if (!this.rain || !cam) return;
+    const W = this.rainBox.w, H = this.rainBox.h, D = this.rainDrops;
+    const wind = this.weather.wind || { dir: 0, strength: 0 };
+    const wx = Math.cos(wind.dir) * wind.strength * 2.2, wz = Math.sin(wind.dir) * wind.strength * 2.2;
+    const vy = -38;
+    const len = 0.05;                       // strecket = 0,05 s av fallet
+    const P = this.rain.geometry.attributes.position.array;
+    const ox = cam.x - W / 2, oz = cam.z - W / 2, oy = cam.y - H / 2;
+    for (let i = 0; i < this.rainN; i++) {
+      let x = D[i * 3] + wx * dt, y = D[i * 3 + 1] + vy * dt, z = D[i * 3 + 2] + wz * dt;
+      if (y < 0) y += H;
+      D[i * 3] = x; D[i * 3 + 1] = y; D[i * 3 + 2] = z;
+      // dropparna ligger i en låda som följer kameran (lindas runt)
+      const px = ox + ((((x - ox) % W) + W) % W), pz = oz + ((((z - oz) % W) + W) % W), py = oy + y;
+      // inga droppar inne i kabinen runt kameran
+      const ex = px - cam.x, ey = py - cam.y, ez = pz - cam.z;
+      if (ex * ex + ez * ez < 36 && ey > -5 && ey < 6) { P.fill(0, i * 6, i * 6 + 6); continue; }
+      P[i * 6] = px; P[i * 6 + 1] = py; P[i * 6 + 2] = pz;
+      P[i * 6 + 3] = px - wx * len; P[i * 6 + 4] = py - vy * len; P[i * 6 + 5] = pz - wz * len;
+    }
+    this.rain.geometry.attributes.position.needsUpdate = true;
+  }
+
+  _updateLightning(dt) {
+    if (!this.weather || !this.weather.lightning) return;
+    this.nextFlash -= dt;
+    if (this.nextFlash <= 0) {
+      this.flash = 1;
+      this.nextFlash = 5 + Math.random() * 9;
+      this._double = Math.random() < 0.5 ? 0.18 : -1;   // ibland en dubbelblixt
+      if (this.onThunder) this.onThunder();
+    }
+    if (this._double > 0) { this._double -= dt; if (this._double <= 0) { this.flash = Math.max(this.flash, 0.8); this._double = -1; } }
+    if (this.flash > 0) this.flash = Math.max(0, this.flash - dt * 4.5);
+    this.hemi.intensity = this.hemiBase + this.flash * 3.2;
+    // dimman och himlen lyser upp ett ögonblick
+    if (this._fogBase && (this.flash > 0 || this._flashWas)) {
+      if (!this._white) this._white = new THREE.Color(0xeef2ff);
+      this.scene.fog.color.copy(this._fogBase).lerp(this._white, this.flash * 0.4);
+      this.scene.background.copy(this.scene.fog.color);
+      this._flashWas = this.flash > 0;
+    }
   }
 
   // Belöning när man flyger igenom en ring: ringen blinkar och en ljusvåg växer ut från den
@@ -193,6 +329,7 @@ export class World3D {
     const f = this.scene.fog, A = this.fogA, B = this.fogB;
     f.color.copy(A.color).lerp(B.color, k);
     this.scene.background.copy(f.color);
+    this._fogBase = f.color.clone();
     // avståndet minskar snabbt i början så att dimman "sluter sig" när man kliver in
     const e = 1 - Math.pow(1 - k, 2);
     f.near = A.near + (B.near - A.near) * e;
@@ -206,8 +343,12 @@ export class World3D {
 
   resetStars() { this.starMeshes.forEach((m) => { m.visible = true; }); }
 
-  animate(dt) {
+  // cam: kamerans position (för regnet); ft: flygtiden (för de fallande stenarna)
+  animate(dt, cam = null, ft = null) {
     this.time += dt;
+    if (ft !== null && ft !== undefined) this.setMoverTime(ft);
+    this._updateRain(dt, cam);
+    this._updateLightning(dt);
     if (this._bursts) for (const b of this._bursts) {
       if (!b.visible) continue;
       const u = b.userData; u.t += dt;

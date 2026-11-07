@@ -9,12 +9,27 @@ Båda figurerna syns i cockpiten. Pilotens händer följer ratten och gasreglage
 
 ## Spellägen
 
-- **Free Play:** 20 kartplatser. Just nu är 2 spelbara (*Canyon Loop* och *Training Flight*), och resten visas skuggade som "Coming soon". Välj en karta och sedan en roll:
+- **Free Play:** 20 kartor som blir svårare och svårare. Välj en karta och sedan en roll:
   - **Pilot:** flyg blint, och en NPC-navigator pratar (engelsk röst), pekar och guidar dig.
   - **Navigator:** du ser allt och styr en blind AI-pilot. Håll **←/→** (knappar eller tangenter) för att svänga och **Shift** för att bromsa. Den håller höjden själv.
   - **Solo:** flyg själv med en liten karta i hörnet.
 - **Play with Friends:** den ena trycker *Create game* och får en **ny kod med 6 tecken för varje party**. Den andra skriver in koden eller öppnar länken från *Share link*. Koden gäller i **24 timmar** och behålls om värden tappar anslutningen en stund. Om nätverken blockerar en direktanslutning (vanligt på olika mobilnät) går speldatan automatiskt via ett offentligt relä (MQTT över wss: broker.emqx.io eller broker.hivemq.com). Röstchatten fungerar då inte, så ring varandra i stället.
 - **Settings:** namn, invertera upp/ner, styrkänslighet, pekskärmskontroller (Auto/On/Off), ljudeffekter och NPC-röst.
+
+## Kartorna
+
+1. *Canyon Loop* och 2. *Training Flight* är handgjorda övningsbanor. Kartorna 3–20 byggs av faser längs en slingrande korridor:
+
+| Kartor | Värld | Nytt |
+| --- | --- | --- |
+| 3–6 | Skog | slalom runt pelare, upp och ner, väggar med hål, lågt tak |
+| 7–10 | Berg | klippväggar, skarpa svängar (bromsa!), fallande stenar |
+| 11–14 | Stormskog | regn, dimma och vindbyar som knuffar planet |
+| 15–20 | Stormberg | blixtar och åska, sicksack mellan pelare, snabba undanmanövrar |
+
+Ju högre nummer, desto fler portar och hinder, smalare korridor, skarpare svängar, större höjdskillnader, mindre hål, lägre tak, snabbare stenras och starkare vind. Fallande stenar syns som röda ringar på radarn och fylls när stenen är nere vid planets höjd. NPC-navigatören ropar "Rock ahead!" och "Falling rocks!".
+
+Kartorna är seedade, så båda spelarna får exakt samma bana. Varje karta har en förvald variant som testerna har flugit igenom, både med en skicklig pilot och med en blind pilot som bara följer NPC:ns röstorder.
 
 ## Regler och poäng
 
@@ -86,7 +101,7 @@ npm test
 
 Testerna kontrollerar bland annat följande:
 
-- **Banorna:** autopiloten klarar dem utan krasch, och NPC-navigatören guidar en blind pilot igenom.
+- **Banorna:** autopiloten klarar dem utan krasch, och NPC-navigatören guidar en blind pilot igenom. Det gäller alla 20 kartor, och kartorna 3–20 kontrolleras också för att vara deterministiska och bli svårare.
 - **Navigatörsläget:** en navigatör kan styra AI-piloten genom kanjonen med bara ←/→.
 - **Regler och poäng:** krasch ger omstart, och ringar ger poäng (mest för Perfect).
 - **Modellerna och figurerna:** de har alla namngivna delar, och händerna sitter kvar på ratten.

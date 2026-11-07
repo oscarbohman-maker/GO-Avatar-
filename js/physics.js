@@ -165,8 +165,8 @@ export const PROBES = [
 ];
 
 // Hindertyp för kraschens effekter: mark, berg, trad (träd) eller byggnad
-const BOX_TYPE = { canyon: 'berg', treewall: 'trad', wall: 'byggnad', tunnel: 'byggnad', roof: 'byggnad' };
-const BOX_NAME = { canyon: 'the canyon wall', treewall: 'a tree', wall: 'a wall', tunnel: 'a wall', roof: 'the tunnel roof' };
+const BOX_TYPE = { canyon: 'berg', cliffwall: 'berg', treewall: 'trad', wall: 'byggnad', tunnel: 'byggnad', roof: 'byggnad', rockwall: 'berg', rockroof: 'berg' };
+const BOX_NAME = { canyon: 'the canyon wall', cliffwall: 'the cliff', treewall: 'a tree', wall: 'a wall', tunnel: 'a wall', roof: 'the tunnel roof', rockwall: 'a rock wall', rockroof: 'the rock ceiling' };
 const unit = (x, y, z) => { const l = Math.hypot(x, y, z) || 1; return [x / l, y / l, z / l]; };
 
 // Ytans normal på en låda (från lådan mot punkten), i världen
@@ -185,8 +185,16 @@ function boxNormal(b, x, y, z) {
   return [n[0] * cy + n[2] * sy, n[1], -n[0] * sy + n[2] * cy];
 }
 
+// Fallande sten: höjden vid flygtiden t (accelererar nedåt och börjar om uppifrån).
+// Samma formel hos piloten och navigatören, så båda ser stenarna på samma ställe.
+export function moverY(m, t) {
+  const k = (((t + m.phase) % m.period) + m.period) % m.period / m.period;
+  return m.top - (m.top - m.bottom) * k * k;
+}
+
 // Vad (om något) träffar en sfär i punkten? Returnerar { what, type, n } eller null.
-function hitInfo(level, x, y, z, r) {
+// t = flygtiden (för fallande stenar).
+function hitInfo(level, x, y, z, r, t = 0) {
   if (y < GROUND_Y * (r / PLANE_R)) return { what: 'the ground', type: 'mark', n: [0, 1, 0] };
   const grid = level._grid;
   const cands = grid ? grid.query(x, z) : null;
@@ -195,17 +203,23 @@ function hitInfo(level, x, y, z, r) {
   for (const t of trees) if (hitTree(t, x, y, z, r)) return { what: 'a tree', type: 'trad', n: unit(x - t.x, 0, z - t.z) };
   for (const o of rocks) if (hitRock(o, x, y, z, r)) return { what: 'a rock', type: 'berg', n: unit(x - o.x, 0, z - o.z) };
   for (const b of level.boxes) if (hitBox(b, x, y, z, r)) return { what: BOX_NAME[b.kind] || 'a wall', type: BOX_TYPE[b.kind] || 'byggnad', n: boxNormal(b, x, y, z) };
+  if (level.movers) for (const m of level.movers) {
+    const dx = x - m.x, dz = z - m.z;
+    if (dx * dx + dz * dz > (m.r + r) * (m.r + r)) continue;
+    const my = moverY(m, t), dy = y - my;
+    if (dx * dx + dy * dy + dz * dz < (m.r + r) * (m.r + r)) return { what: 'a falling rock', type: 'berg', n: unit(dx, dy, dz) };
+  }
   return null;
 }
 
-function hitAt(level, x, y, z, r) {
-  const h = hitInfo(level, x, y, z, r);
+function hitAt(level, x, y, z, r, t = 0) {
+  const h = hitInfo(level, x, y, z, r, t);
   return h ? h.what : null;
 }
 
-// Punktkollision (används av test och för respawn-kontroller)
-export function checkCollision(level, x, y, z, r = PLANE_R) {
-  const hit = hitAt(level, x, y, z, r);
+// Punktkollision (används av test, NPC:n och för respawn-kontroller)
+export function checkCollision(level, x, y, z, r = PLANE_R, t = 0) {
+  const hit = hitAt(level, x, y, z, r, t);
   if (hit) return hit;
   const B = level.bounds, m = 140;
   if (x < B.minX - m || x > B.maxX + m || z < B.minZ - m || z > B.maxZ + m) return 'out of bounds';
@@ -213,11 +227,11 @@ export function checkCollision(level, x, y, z, r = PLANE_R) {
 }
 
 // Kollision för hela planet (kropp, nos, stjärt och vingspetsar)
-export function checkPlaneCollision(level, s) {
+export function checkPlaneCollision(level, s, t = 0) {
   for (const pr of PROBES) {
     const w = rotYXZ(pr.p[0], pr.p[1], pr.p[2], s.yaw, s.pitch, s.roll);
     const x = s.x + w[0], y = s.y + w[1], z = s.z + w[2];
-    const hit = hitAt(level, x, y, z, pr.r);
+    const hit = hitAt(level, x, y, z, pr.r, t);
     if (hit) return pr.name === 'body' || pr.name === 'nose' ? hit : hit + ' (' + pr.name + ')';
   }
   const B = level.bounds, m = 140;
@@ -227,11 +241,11 @@ export function checkPlaneCollision(level, s) {
 
 // Som checkPlaneCollision men med detaljer för kraschens effekter:
 // { what, type, part, pos: [x,y,z], n: [x,y,z] } – vilken del av planet som träffade, var och ytans normal.
-export function planeHit(level, s) {
+export function planeHit(level, s, t = 0) {
   for (const pr of PROBES) {
     const w = rotYXZ(pr.p[0], pr.p[1], pr.p[2], s.yaw, s.pitch, s.roll);
     const x = s.x + w[0], y = s.y + w[1], z = s.z + w[2];
-    const h = hitInfo(level, x, y, z, pr.r);
+    const h = hitInfo(level, x, y, z, pr.r, t);
     if (h) {
       const what = pr.name === 'body' || pr.name === 'nose' ? h.what : h.what + ' (' + pr.name + ')';
       return { what, type: h.type, part: pr.name, pos: [x, y, z], n: h.n };

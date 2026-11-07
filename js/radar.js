@@ -1,5 +1,6 @@
 // Navigatörens radar: ovanifrån-karta över kommande hinder och portar,
 // höjdmätare och möjlighet att rita ut en egen rutt.
+import { moverY } from './physics.js';
 
 const ZOOMS = [90, 160, 280, 480];
 const COLORS = {
@@ -11,6 +12,10 @@ const COLORS = {
   rock: '#9aa0a6',
   canyon: '#b08968',
   treewall: '#1d6a34',
+  cliffwall: '#7d7166',
+  rockwall: '#e06c5a',
+  rockroof: 'rgba(160,150,140,0.24)',
+  mover: '#ff5a3c',
   wall: '#e06c5a',
   tunnel: '#8fa3b0',
   roof: 'rgba(143,163,176,0.22)',
@@ -70,6 +75,7 @@ export class RadarView {
 
   setState(s) {
     this.state = s;
+    this._ftAt = performance.now();
     if (!this.view) this.view = { x: s.x, y: s.y, z: s.z, yaw: s.yw };
   }
 
@@ -198,11 +204,11 @@ export class RadarView {
       ctx.translate(b.x, b.z);
       ctx.rotate(-b.yaw);
       ctx.fillStyle = COLORS[b.kind] || COLORS.wall;
-      if (b.kind === 'roof') ctx.fillRect(-b.hx, -b.hz, b.hx * 2, b.hz * 2);
+      if (b.kind === 'roof' || b.kind === 'rockroof') ctx.fillRect(-b.hx, -b.hz, b.hx * 2, b.hz * 2);
       ctx.restore();
     }
     for (const b of L.boxes) {
-      if (b.kind === 'roof') continue;
+      if (b.kind === 'roof' || b.kind === 'rockroof') continue;
       ctx.save();
       ctx.translate(b.x, b.z);
       ctx.rotate(-b.yaw);
@@ -218,6 +224,25 @@ export class RadarView {
     }
     ctx.fillStyle = COLORS.rock;
     for (const o of L.rocks) { ctx.beginPath(); ctx.arc(o.x, o.z, o.r, 0, Math.PI * 2); ctx.fill(); }
+
+    // fallande stenar: ring som fylls när stenen är nere vid flyghöjd
+    if (L.movers && L.movers.length) {
+      const s = this.state;
+      let ft = s && s.ft ? s.ft : 0;
+      if (s && s.ph === 'fly') ft += Math.min(0.25, (performance.now() - (this._ftAt || 0)) / 1000);
+      const alt = s ? s.y : 30;
+      for (const m of L.movers) {
+        const y = moverY(m, ft);
+        const near = Math.max(0, 1 - Math.abs(y - alt) / 25);      // nära planets höjd = farligt
+        ctx.strokeStyle = COLORS.mover;
+        ctx.lineWidth = 2 * px;
+        ctx.beginPath(); ctx.arc(m.x, m.z, m.r + 3, 0, Math.PI * 2); ctx.stroke();
+        ctx.globalAlpha = 0.25 + 0.75 * near;
+        ctx.fillStyle = COLORS.mover;
+        ctx.beginPath(); ctx.arc(m.x, m.z, m.r * (0.6 + 0.6 * near), 0, Math.PI * 2); ctx.fill();
+        ctx.globalAlpha = 1;
+      }
+    }
 
     // spår efter planet
     this.trail.forEach((p, i) => {

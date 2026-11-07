@@ -1,9 +1,9 @@
 // Kör: node tests/sim.test.mjs
 // Kontrollerar att banorna går att flyga igenom och att reglerna fungerar.
 import assert from 'node:assert/strict';
-import { buildLevel } from '../js/levels.js';
+import { buildLevel, GEN_MAPS } from '../js/levels.js';
 import { FlightSession, STEP, POINTS, timeBonus } from '../js/sim.js';
-import { checkCollision, gateLocal, forward, gateCrossing } from '../js/physics.js';
+import { checkCollision, gateLocal, forward, gateCrossing, moverY } from '../js/physics.js';
 import { NpcNavigator, pursuitTarget } from '../js/npc.js';
 import { LocalAIPilot } from '../js/aipilot.js';
 
@@ -248,6 +248,89 @@ test('combo: ringar i rad höjer multiplikatorn, miss nollställer', () => {
   assert.deepEqual(passes.map((e) => e.mult), [1, 1, 1.5, 1.5, 2, 2]);
   assert.equal(passes[4].bonus, POINTS.perfect * 2);
   assert.ok(sess.comboBonus > 0);
+});
+
+// ---------------------------------------------------------------- kartor 3–20
+// Flyger med NPC:ns siktpunkt (skicklig pilot) eller bara med NPC:ns röstorder (blind pilot)
+function flyGuided(level, mode, gain = 3.5) {
+  const npc = new NpcNavigator(level);
+  let cmd = { turn: 0, climb: 0, brake: false };
+  const events = [];
+  const sess = new FlightSession(level, (e) => events.push(e));
+  sess.begin();
+  for (let i = 0; i < 60 * 400 && sess.phase !== 'finished' && sess.crashes < 1; i++) {
+    let inp = { x: 0, y: 0 };
+    if (sess.phase === 'fly') {
+      const o = npc.update(1 / 60, sess);
+      if (o && o.command) cmd = o.command;
+      if (mode === 'skilled' && npc.aim) {
+        const p = sess.plane, A = npc.aim;
+        const dx = A.x - p.x, dz = A.z - p.z;
+        const err = wrap(Math.atan2(-dx, -dz) - p.yaw);
+        const wp = clamp(Math.atan2(A.y - p.y, Math.max(Math.hypot(dx, dz), 8)), -0.6, 0.6);
+        inp = { x: clamp(-err * gain + p.yawRate * 0.9, -1, 1), y: clamp((wp - p.pitch) * 4, -1, 1), brake: Math.abs(err) > 0.45 || npc.blocked };
+      } else inp = { x: clamp(cmd.turn, -1, 1), y: clamp(cmd.climb * 2 - sess.plane.pitch * 2, -1, 1), brake: cmd.brake };
+    }
+    sess.step(inp, STEP);
+  }
+  return { sess, events };
+}
+
+const gen = GEN_MAPS.map(([n]) => buildLevel('m' + n));
+test('kartor 3–20: alla finns, är spelbara och blir svårare', () => {
+  assert.equal(gen.length, 18);
+  let prevGates = 0;
+  gen.forEach((L) => {
+    assert.ok(L.gates.length >= prevGates, L.name + ': färre portar än kartan före');
+    prevGates = L.gates.length;
+  });
+  const obst = (L) => L.rocks.length + L.movers.length + L.zones.length;
+  assert.ok(obst(gen[17]) > obst(gen[0]) * 1.5, 'sista kartan har klart fler hinder än första');
+  assert.ok(gen[17].halfW < gen[0].halfW, 'korridoren blir smalare');
+  // storm, regn och fallande stenar på de svåra kartorna
+  gen.slice(8).forEach((L) => assert.ok(L.weather && L.weather.rain && L.weather.wind, L.name + ': storm'));
+  assert.ok(gen.slice(12).every((L) => L.weather.lightning), 'blixtar på de svåraste');
+  assert.ok(gen.reduce((a, L) => a + L.movers.length, 0) >= 20, 'fallande stenar finns');
+  // upp och ner: höjdskillnaden mellan portarna växer
+  const span = (L) => Math.max(...L.gates.map((g) => g.y)) - Math.min(...L.gates.map((g) => g.y));
+  const avg = (a) => a.reduce((x, L) => x + span(L), 0) / a.length;
+  assert.ok(avg(gen.slice(12)) > span(gen[0]) * 1.5, 'större höjdskillnader på svåra kartor');
+});
+
+test('kartor 3–20: deterministiska (samma för båda spelarna)', () => {
+  GEN_MAPS.forEach(([n], i) => assert.deepEqual(JSON.parse(JSON.stringify(buildLevel('m' + n))), JSON.parse(JSON.stringify(gen[i]))));
+});
+
+test('kartor 3–20: portarnas mitt, stjärnorna och starten är fria', () => {
+  gen.forEach((L) => {
+    L.gates.forEach((g, i) => assert.equal(checkCollision(L, g.x, g.y, g.z, 3), null, `${L.name} port ${i + 1}`));
+    L.stars.forEach((st, i) => assert.equal(checkCollision(L, st.x, st.y, st.z, 2), null, `${L.name} stjärna ${i + 1}`));
+    assert.equal(checkCollision(L, L.start.x, L.start.y, L.start.z, 4), null, `${L.name} start`);
+  });
+});
+
+test('fallande stenar faller och kommer tillbaka (periodiskt)', () => {
+  const m = gen.find((L) => L.movers.length).movers[0];
+  assert.ok(Math.abs(moverY(m, 0) - moverY(m, m.period)) < 1e-6);
+  const ys = Array.from({ length: 40 }, (_, i) => moverY(m, (i / 40) * m.period));
+  assert.ok(Math.max(...ys) <= m.top + 1e-6 && Math.min(...ys) >= m.bottom - 1e-6);
+});
+
+GEN_MAPS.forEach(([n, name], i) => {
+  test(`[${name}] skicklig pilot klarar kartan utan krasch och utan missade portar`, () => {
+    for (const gain of [3.5, 2.8, 4.2]) {
+      const { sess, events } = flyGuided(gen[i], 'skilled', gain);
+      const cr = events.filter((e) => e.kind === 'crash').map((e) => e.what);
+      assert.equal(sess.phase, 'finished', `nådde port ${sess.nextGate} (styrning ${gain}), krasch: ${cr.join(', ')}`);
+      assert.equal(sess.misses, 0);
+    }
+  });
+  test(`[${name}] blind pilot klarar kartan med bara NPC-navigatörens order`, () => {
+    const { sess, events } = flyGuided(gen[i], 'npc');
+    const cr = events.filter((e) => e.kind === 'crash').map((e) => e.what);
+    assert.equal(sess.phase, 'finished', `nådde port ${sess.nextGate}, krasch: ${cr.join(', ')}`);
+    assert.equal(sess.misses, 0);
+  });
 });
 
 if (failures) { console.log(`\n${failures} test misslyckades`); process.exit(1); }

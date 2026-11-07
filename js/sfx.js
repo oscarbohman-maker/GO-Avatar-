@@ -31,7 +31,32 @@ function tone(freq, dur, type = 'sine', vol = 0.15, when = 0, slideTo = null) {
   } catch (_) {}
 }
 
+// Åska: filtrerat brus som mullrar och klingar av
+function rumble(delay = 0.3, dur = 2.2, vol = 0.22) {
+  if (!ctx || !enabled) return;
+  try {
+    const n = Math.floor(ctx.sampleRate * dur);
+    const buf = ctx.createBuffer(1, n, ctx.sampleRate);
+    const d = buf.getChannelData(0);
+    let last = 0;
+    for (let i = 0; i < n; i++) { last = last * 0.96 + (Math.random() * 2 - 1) * 0.04; d[i] = last * 6; }
+    const src = ctx.createBufferSource();
+    src.buffer = buf;
+    const f = ctx.createBiquadFilter();
+    f.type = 'lowpass'; f.frequency.value = 240;
+    const g = ctx.createGain();
+    const t0 = ctx.currentTime + delay;
+    g.gain.setValueAtTime(0.0001, t0);
+    g.gain.exponentialRampToValueAtTime(vol, t0 + 0.08);
+    g.gain.exponentialRampToValueAtTime(0.0001, t0 + dur);
+    src.connect(f).connect(g).connect(ctx.destination);
+    src.start(t0);
+    src.stop(t0 + dur + 0.05);
+  } catch (_) {}
+}
+
 export const sfx = {
+  thunder() { rumble(0.25 + Math.random() * 0.8); },
   tick() { tone(660, 0.12, 'square', 0.08); },
   go() { tone(990, 0.35, 'square', 0.1); },
   perfect() { [990, 1320, 1760].forEach((f, i) => tone(f, 0.14, 'triangle', 0.12, i * 0.06)); },

@@ -47,7 +47,7 @@ export class PilotView {
     this.view.frame(dt, {
       x: p.x, y: p.y, z: p.z, yaw: p.yaw, pitch: p.pitch, roll: p.roll, speed: p.speed,
       ix: p.ix, iy: p.iy, throttle: p.throttle, accLong: p.accLong, loadN: p.loadN, rollAcc: p.rollAcc,
-      phase: S.phase, cd: S.countdown, ng: S.nextGate,
+      phase: S.phase, cd: S.countdown, ng: S.nextGate, ft: S.flightTime,
     }, this.input.look);
     this.onFrame(S, dt);
   }

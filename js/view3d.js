@@ -4,6 +4,7 @@ import * as THREE from './lib/three.module.min.js';
 import { World3D } from './world3d.js';
 import { PlaneRig } from './rig.js';
 import { CrashFX } from './crashfx.js';
+import { sfx } from './sfx.js';
 
 const V = (x = 0, y = 0, z = 0) => new THREE.Vector3(x, y, z);
 const smooth = (t) => t * t * (3 - 2 * t);
@@ -24,6 +25,7 @@ export class View3D {
     this.renderer.setPixelRatio(dpr);
 
     this.world = new World3D(level);
+    this.world.onThunder = () => sfx.thunder();
     this.denseFog = this.seat === 'pilot';   // navigatören ser genom dimman
     this.rig = new PlaneRig(this.seat);
     this.world.scene.add(this.rig.root);
@@ -78,7 +80,7 @@ export class View3D {
     const rig = this.rig;
     rig.update(dt, st, this.seat === 'pilot' ? { pilotLook: look } : { copilotLook: look });
     this.world.updateGates(st.ng || 0);
-    this.world.animate(dt);
+    this.world.animate(dt, this.camera.position, st.ft);
     this.fx.update(dt);
     if (st.phase === 'crashed' && this.crash) {
       this.crash.t += dt;

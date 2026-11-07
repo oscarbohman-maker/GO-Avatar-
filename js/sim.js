@@ -2,7 +2,7 @@
 // Kraschar man börjar man om från starten (tiden nollställs).
 // Körs hos piloten (auktoritativ) och skickas sedan till navigatören.
 
-import { stepFlight, planeHit, gateCrossing, gateLocal, forward, newPlane, FLIGHT } from './physics.js';
+import { stepFlight, planeHit, gateCrossing, gateLocal, forward, newPlane, turbulence, FLIGHT } from './physics.js';
 import { STAR_RADIUS } from './levels.js';
 
 // Kortaste avståndet från punkten c till sträckan a-b (3D)
@@ -128,6 +128,14 @@ export class FlightSession {
     const p0 = [p.x, p.y, p.z];
     stepFlight(p, inp, dt, FLIGHT);
     this.flightTime += dt;
+    // Storm: vindbyar knuffar planet i sidled (deterministiskt efter flygtiden)
+    const W = this.level.weather && this.level.weather.wind;
+    if (W) {
+      const g = turbulence(this.flightTime * 0.55, 11) * 1.4;
+      p.x += Math.cos(W.dir) * W.strength * g * dt;
+      p.z += Math.sin(W.dir) * W.strength * g * dt;
+      p.gust = g * W.strength;
+    }
     if (p.y > this.level.ceiling) { p.y = this.level.ceiling; if (p.pitch > 0) { p.pitch *= 0.9; p.pitchRate = Math.min(0, p.pitchRate); } }
     const p1 = [p.x, p.y, p.z];
 
@@ -182,7 +190,7 @@ export class FlightSession {
     }
 
     if (this.grace > 0) { this.grace -= dt; return; }
-    const hit = planeHit(this.level, p);
+    const hit = planeHit(this.level, p, this.flightTime);
     if (hit) {
       // Kraschens styrka: fart × hur frontal träffen är × vilken del som träffar
       const f = forward(p.yaw, p.pitch);
@@ -210,7 +218,7 @@ export class FlightSession {
     return {
       t: 'st', x: r(p.x), y: r(p.y), z: r(p.z), yw: r(p.yaw, 1000), pt: r(p.pitch, 1000), rl: r(p.roll, 1000),
       sp: r(p.speed, 10), ng: this.nextGate, tm: r(this.time, 10), cr: this.crashes, ms: this.misses,
-      ph: this.phase, cd: r(this.countdown, 10), sc: this.stars.size, pts: this.points, cb: this.combo,
+      ph: this.phase, cd: r(this.countdown, 10), sc: this.stars.size, pts: this.points, cb: this.combo, ft: r(this.flightTime),
       // för kroppar, rattar och instrument hos navigatören
       ix: r(p.ix), iy: r(p.iy), th: p.throttle, ln: r(p.loadN), al: r(p.accLong, 10), ra: r(p.rollAcc, 10),
     };
