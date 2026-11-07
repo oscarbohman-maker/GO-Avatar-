@@ -54,6 +54,7 @@ function myName() { return Store.profile.name || 'Player'; }
 let current = 'screen-home';
 function show(id) {
   current = id;
+  closeGameMenu();
   $$('.screen').forEach((s) => s.classList.toggle('active', s.id === id));
   const sc = $('#' + id);
   if (sc && sc.classList.contains('menu-screen')) sc.scrollTop = 0;
@@ -79,7 +80,15 @@ function applyTouchSetting() {
   const coarse = window.matchMedia && window.matchMedia('(pointer: coarse)').matches;
   const auto = coarse || 'ontouchstart' in window || app._touched;
   document.body.classList.toggle('touch', pref === 'on' || (pref === 'auto' && !!auto));
+  applyCompact();
 }
+
+// Kompakt spelvy på mobil och små skärmar: smal HUD, meny-knapp, mindre kontroller och popups
+function applyCompact() {
+  const small = window.matchMedia && window.matchMedia('(max-width: 900px), (max-height: 540px)').matches;
+  document.body.classList.toggle('compact-ui', !!small || document.body.classList.contains('touch'));
+}
+window.addEventListener('resize', applyCompact);
 window.addEventListener('touchstart', () => { app._touched = true; applyTouchSetting(); }, { once: true, passive: true });
 // Safari: hindra nyp-zoom i spelet
 document.addEventListener('gesturestart', (e) => e.preventDefault());
@@ -1144,7 +1153,24 @@ function startSolo(mode, levelId) {
   startGame();
 }
 
+function closeGameMenu() {
+  const gm = $('.game-menu');
+  if (!gm || !gm.classList.contains('open')) return;
+  gm.classList.remove('open');
+  $('#btn-gmenu').setAttribute('aria-expanded', 'false');
+}
+
 function initGameMenu() {
+  // meny-knappen (kompakt läge): öppnar en liten lista med röst, omstart och avsluta
+  const gm = $('.game-menu'), toggle = $('#btn-gmenu');
+  toggle.onclick = () => {
+    const open = !gm.classList.contains('open');
+    gm.classList.toggle('open', open);
+    toggle.setAttribute('aria-expanded', String(open));
+  };
+  document.addEventListener('pointerdown', (e) => { if (!e.target.closest('.game-menu')) closeGameMenu(); }, { passive: true });
+  document.addEventListener('keydown', (e) => { if (e.key === 'Escape') closeGameMenu(); });
+  $$('.gm-drop .btn').forEach((b) => b.addEventListener('click', () => { if (b.id !== 'btn-npc-voice') closeGameMenu(); }));
   $('#btn-restart').onclick = () => app.game && app.game.restart(true);
   $('#btn-again').onclick = () => app.game && app.game.restart(true);
   $('#btn-tolobby').onclick = () => backToLobby(true);

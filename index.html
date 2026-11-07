@@ -146,14 +146,14 @@
       <div class="vignette"></div>
       <div class="crosshair"></div>
       <div class="hud-top">
-        <div class="hud-item"><small>TIME</small><b class="hud-time">0.0</b></div>
-        <div class="hud-item"><small>GATE</small><b class="hud-gate">1/15</b></div>
-        <div class="hud-item score"><small>SCORE</small><b class="hud-score">0</b></div>
-        <div class="hud-item"><small data-icon="star">STARS</small><b class="hud-star">0</b></div>
+        <div class="hud-item"><small data-icon="clock"><span class="hl">TIME</span></small><b class="hud-time">0.0</b></div>
+        <div class="hud-item"><small data-icon="target"><span class="hl">GATE</span></small><b class="hud-gate">1/15</b></div>
+        <div class="hud-item score"><small data-icon="award"><span class="hl">SCORE</span></small><b class="hud-score">0</b></div>
+        <div class="hud-item"><small data-icon="star"><span class="hl">STARS</span></small><b class="hud-star">0</b></div>
       </div>
       <div class="hud-bottom">
-        <div class="hud-item"><small>SPEED</small><b class="hud-speed">0</b></div>
-        <div class="hud-item"><small>ALT</small><b class="hud-alt">0</b></div>
+        <div class="hud-item"><small data-icon="gauge"><span class="hl">SPEED</span></small><b class="hud-speed">0</b><span class="hu">km/h</span></div>
+        <div class="hud-item"><small data-icon="mountain"><span class="hl">ALT</span></small><b class="hud-alt">0</b></div>
       </div>
       <div class="look-zone" title="Drag to look around"></div>
       <div class="edge-flash"></div>
@@ -186,10 +186,10 @@
       <div class="view3d-holder"></div>
       <div class="nav-panel">
         <div class="nav-stats">
-          <div class="hud-item"><small>TIME</small><b class="hud-time">0.0</b></div>
-          <div class="hud-item"><small>GATE</small><b class="hud-gate">1/15</b></div>
-          <div class="hud-item score"><small>SCORE</small><b class="hud-score">0</b></div>
-          <div class="hud-item"><small data-icon="star">STARS</small><b class="hud-star">0</b></div>
+          <div class="hud-item"><small data-icon="clock"><span class="hl">TIME</span></small><b class="hud-time">0.0</b></div>
+          <div class="hud-item"><small data-icon="target"><span class="hl">GATE</span></small><b class="hud-gate">1/15</b></div>
+          <div class="hud-item score"><small data-icon="award"><span class="hl">SCORE</span></small><b class="hud-score">0</b></div>
+          <div class="hud-item"><small data-icon="star"><span class="hl">STARS</span></small><b class="hud-star">0</b></div>
         </div>
         <div class="guide">
           <div class="guide-turn">—</div>
@@ -233,9 +233,13 @@
 
     <div class="game-menu">
       <button class="btn small voice-btn hidden" title="Voice chat">Voice off</button>
-      <button id="btn-npc-voice" class="btn small hidden" title="NPC voice">Voice</button>
-      <button id="btn-restart" class="btn small" data-icon="restart" title="Restart"><span class="lbl">Restart</span></button>
-      <button id="btn-tolobby" class="btn small" aria-label="Exit" data-icon="close"></button>
+      <!-- på mobil: en liten meny-knapp i stället för en rad med stora knappar -->
+      <button id="btn-gmenu" class="btn small gm-toggle" aria-label="Menu" aria-expanded="false" aria-controls="gm-drop" data-icon="more"></button>
+      <div id="gm-drop" class="gm-drop">
+        <button id="btn-npc-voice" class="btn small hidden" title="NPC voice">Voice</button>
+        <button id="btn-restart" class="btn small" data-icon="restart" title="Restart"><span class="lbl">Restart</span></button>
+        <button id="btn-tolobby" class="btn small" aria-label="Exit" data-icon="close"><span class="lbl lbl-m">Exit</span></button>
+      </div>
     </div>
 
     <div id="results" class="overlay hidden">

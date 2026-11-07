@@ -50,6 +50,8 @@ Kartorna är seedade, så båda spelarna får exakt samma bana. Varje karta har 
 - Missad port: +5 s på tiden.
 - Rekordet per karta är högsta poäng, och det sparas lokalt i webbläsaren utan konto.
 
+**På mobil och små skärmar** blir spelvyn kompakt, så att man ser så mycket som möjligt av banan. Tid, port, poäng och stjärnor visas i en smal rad med ikoner, och fart och höjd i en liten rad längst ned. Röst, omstart och avsluta ligger bakom ⋯-knappen. Styrspaken och BOOST/BRAKE är mindre och genomskinliga. Navigatörens order visas på en rad längst ned och bleknar bort. Belöningar och combo visas som små, korta popups högt upp, så att de inte skymmer vägen.
+
 **Styrning för piloten:** W/S eller ↑/↓ för upp/ner, A/D eller ←/→ för att banka och svänga, Mellanslag för gas, Shift för broms och Q/E för att titta runt. På mobil finns en styrspak till vänster och knappar till höger, och man drar på högra delen av skärmen för att titta runt.
 
 ## Fysik

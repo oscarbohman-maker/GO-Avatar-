@@ -42,6 +42,8 @@ const P = {
   tree: '<path d="M12 2 5.5 11h3.5L5 17h14l-4-6h3.5z"/><line x1="12" y1="17" x2="12" y2="22"/>',
   leaf: '<path d="M4 20c0-9.5 6.5-16 16-16 0 9.5-6.5 16-16 16z"/><path d="M4 20 13.5 10.5"/>',
   mountain: '<path d="M2 20 9 7.5l4 6.5 3-4.5L22 20z"/>',
+  more: '<circle cx="5" cy="12" r="1.7" fill="currentColor"/><circle cx="12" cy="12" r="1.7" fill="currentColor"/><circle cx="19" cy="12" r="1.7" fill="currentColor"/>',
+  gauge: '<path d="M3.3 18.5a10 10 0 1 1 17.4 0"/><line x1="12" y1="14" x2="16" y2="9.5"/><circle cx="12" cy="14" r="1.3" fill="currentColor"/>',
   check: '<polyline points="20 6 9 17 4 12"/>',
   ruler: '<path d="M3 17 17 3l4 4L7 21z"/><line x1="7" y1="13" x2="9" y2="15"/><line x1="10" y1="10" x2="12" y2="12"/><line x1="13" y1="7" x2="15" y2="9"/>',
   plane: '<path fill="currentColor" stroke="none" d="M21.5 15.5v-2L13.5 9V3.6a1.5 1.5 0 0 0-3 0V9l-8 4.5v2l8-2.4v5.1l-2.2 1.6v1.7l3.7-1 3.7 1v-1.7l-2.2-1.6v-5.1z"/>',

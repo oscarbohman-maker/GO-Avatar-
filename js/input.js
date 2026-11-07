@@ -87,7 +87,9 @@ export class Input {
     if (d > R) { dx *= R / d; dy *= R / d; }
     this.stick.x = dx / R;
     this.stick.y = -dy / R;
-    this.knob.style.transform = `translate(calc(-50% + ${dx}px), calc(-50% + ${dy}px))`;
+    // knappen stannar inom ringen (ringen är mindre på mobil); styrningen är densamma
+    const k = Math.min(1, (this.base.offsetWidth / 2) / R);
+    this.knob.style.transform = `translate(calc(-50% + ${dx * k}px), calc(-50% + ${dy * k}px))`;
   }
 
   read(dt) {
