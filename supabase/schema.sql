@@ -67,21 +67,59 @@ on conflict (id) do update set tier = excluded.tier, stars = excluded.stars, max
 
 insert into public.skins (id, price, min_level) values
   ('classic', 0, 1),
-  ('sky', 150, 2),
-  ('sunset', 200, 3),
-  ('ranger', 250, 4),
-  ('rookie', 0, 5),
-  ('desert', 450, 6),
-  ('camo', 500, 8),
-  ('crimson', 600, 10),
-  ('veteran', 0, 12),
-  ('frost', 900, 13),
-  ('midnight', 1100, 16),
-  ('chrome', 1400, 20),
-  ('lava', 2000, 25),
-  ('golden', 3000, 30),
-  ('legend', 0, 40)
+  ('klassisk-rod', 60, 1),
+  ('himmelsbla', 80, 1),
+  ('kamouflage', 100, 2),
+  ('rutig-racer', 120, 2),
+  ('solnedgang', 140, 3),
+  ('polis', 150, 3),
+  ('mintglass', 160, 3),
+  ('svart-matt', 180, 4),
+  ('zebra', 200, 4),
+  ('retropost', 220, 4),
+  ('neon-natt', 300, 5),
+  ('krom', 340, 6),
+  ('guldrush', 380, 7),
+  ('hajtand', 420, 8),
+  ('tiger', 460, 9),
+  ('iskristall', 500, 10),
+  ('lavasten', 560, 11),
+  ('synthwave', 600, 12),
+  ('kolfiber', 650, 13),
+  ('regnbage', 700, 14),
+  ('galax', 700, 15),
+  ('drakeld', 780, 16),
+  ('fenix', 860, 18),
+  ('isdrake', 940, 19),
+  ('askstorm', 1020, 21),
+  ('nordljus', 1100, 22),
+  ('spektral', 1180, 24),
+  ('tomrum', 1260, 25),
+  ('diamant', 1340, 27),
+  ('solflamma', 1400, 28),
+  ('stjarnjagare', 1500, 30),
+  ('urdrake', 1650, 32),
+  ('robotfalk', 1800, 34),
+  ('tefat', 1950, 36),
+  ('kvantkristall', 2100, 38),
+  ('eldfagel', 2300, 40),
+  ('stormvakt', 2500, 42),
+  ('singularitet', 2700, 44),
+  ('gyllene-kolossen', 2850, 46),
+  ('leviatan', 3000, 48)
 on conflict (id) do update set price = excluded.price, min_level = excluded.min_level;
+
+-- skins som inte längre finns i spelet: köpta exemplar betalas tillbaka (mynt) och tas bort
+do $$
+declare keep text[] := array['classic', 'klassisk-rod', 'himmelsbla', 'kamouflage', 'rutig-racer', 'solnedgang', 'polis', 'mintglass', 'svart-matt', 'zebra', 'retropost', 'neon-natt', 'krom', 'guldrush', 'hajtand', 'tiger', 'iskristall', 'lavasten', 'synthwave', 'kolfiber', 'regnbage', 'galax', 'drakeld', 'fenix', 'isdrake', 'askstorm', 'nordljus', 'spektral', 'tomrum', 'diamant', 'solflamma', 'stjarnjagare', 'urdrake', 'robotfalk', 'tefat', 'kvantkristall', 'eldfagel', 'stormvakt', 'singularitet', 'gyllene-kolossen', 'leviatan'];
+begin
+  update public.profiles p set
+    coins = p.coins + coalesce((select sum(s.price) from public.skins s where s.id = any (p.owned_skins) and not (s.id = any (keep))), 0),
+    owned_skins = array(select x from unnest(p.owned_skins) with ordinality as u(x, i) where x = any (keep) order by i),
+    equipped_skin = case when p.equipped_skin = any (keep) then p.equipped_skin else 'classic' end
+  where not (p.owned_skins <@ keep) or not (p.equipped_skin = any (keep));
+  delete from public.skins where not (id = any (keep));
+end $$;
 
 -- ------------------------------------------------------------ åtkomst
 alter table public.maps enable row level security;

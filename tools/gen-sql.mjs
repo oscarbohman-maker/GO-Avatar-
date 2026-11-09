@@ -69,6 +69,18 @@ insert into public.skins (id, price, min_level) values
 ${skins.join(',\n')}
 on conflict (id) do update set price = excluded.price, min_level = excluded.min_level;
 
+-- skins som inte längre finns i spelet: köpta exemplar betalas tillbaka (mynt) och tas bort
+do $$
+declare keep text[] := array[${SKINS.map((s) => q(s.id)).join(', ')}];
+begin
+  update public.profiles p set
+    coins = p.coins + coalesce((select sum(s.price) from public.skins s where s.id = any (p.owned_skins) and not (s.id = any (keep))), 0),
+    owned_skins = array(select x from unnest(p.owned_skins) with ordinality as u(x, i) where x = any (keep) order by i),
+    equipped_skin = case when p.equipped_skin = any (keep) then p.equipped_skin else ${q(SKINS[0].id)} end
+  where not (p.owned_skins <@ keep) or not (p.equipped_skin = any (keep));
+  delete from public.skins where not (id = any (keep));
+end $$;
+
 -- ------------------------------------------------------------ åtkomst
 alter table public.maps enable row level security;
 alter table public.skins enable row level security;

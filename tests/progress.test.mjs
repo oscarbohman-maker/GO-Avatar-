@@ -6,7 +6,7 @@ import os from 'node:os';
 import path from 'node:path';
 import { execFileSync } from 'node:child_process';
 import { MAX_LEVEL, xpForLevel, xpToNext, levelInfo, calcReward, rankOf, maxScoreOf, TIER_XP } from '../js/progress.js';
-import { SKINS, RARITY, DEFAULT_PARTS, partOf, skinById } from '../js/skins.js';
+import { SKINS, RARITY, RARITY_ORDER, skinById } from '../js/skins.js';
 import { MAPS, buildLevel } from '../js/levels.js';
 
 let failures = 0;
@@ -77,21 +77,30 @@ test('skins: unika id, giltiga färger, rimliga krav, standardskinet gratis', ()
     assert.ok(!ids.has(s.id), 'dubblett ' + s.id); ids.add(s.id);
     assert.ok(RARITY[s.rarity], s.id + ' sällsynthet');
     assert.ok(s.level >= 1 && s.level <= MAX_LEVEL && s.price >= 0);
-    for (const [part, st] of Object.entries(s.parts)) {
-      assert.ok(DEFAULT_PARTS[part], `${s.id}: okänd del ${part}`);
-      assert.match(st.c || '#000000', /^#[0-9a-f]{6}$/i);
-      if (st.e) assert.match(st.e, /^#[0-9a-f]{6}$/i);
-    }
+    assert.ok(s.name && s.desc && /^[\x20-\x7e]+$/.test(s.name + s.desc), s.id + ': namn och beskrivning på engelska');
+    assert.ok(s.swatch.length >= 2 && s.swatch.every((c) => /^#[0-9a-f]{6}$/i.test(c)), s.id + ' färgprov');
   }
   assert.equal(SKINS[0].id, 'classic'); assert.equal(SKINS[0].price, 0); assert.equal(SKINS[0].level, 1);
   assert.equal(skinById('nope').id, 'classic');
   for (let i = 1; i < SKINS.length; i++) assert.ok(SKINS[i].level >= SKINS[i - 1].level, 'listan är sorterad efter level');
 });
 
-test('skins: alla delar i planmodellen hittar rätt del', () => {
-  assert.equal(partOf('flygkropp'), 'body'); assert.equal(partOf('vinge_h'), 'wings'); assert.equal(partOf('fena'), 'tail');
-  assert.equal(partOf('motor_v'), 'engines'); assert.equal(partOf('motorring_h'), 'trim'); assert.equal(partOf('blad_h2'), 'props');
-  assert.equal(partOf('vindruta_v'), null); assert.equal(partOf('fonster_h3'), null);
+test('skins: 10 per sällsynthet, och sällsyntare skins kräver högre level och kostar mer', () => {
+  const by = (r) => SKINS.filter((s) => s.rarity === r && s.id !== 'classic');
+  RARITY_ORDER.forEach((r) => assert.equal(by(r).length, 10, r));
+  const from = { common: 1, epic: 5, legendary: 15, ultra: 30 };   // paketets lägsta level per sällsynthet
+  RARITY_ORDER.forEach((r) => by(r).forEach((s) => assert.ok(s.level >= from[r], `${s.id} level ${s.level}`)));
+  for (let k = 1; k < RARITY_ORDER.length; k++) {
+    assert.ok(Math.min(...by(RARITY_ORDER[k]).map((s) => s.price)) >= Math.max(...by(RARITY_ORDER[k - 1]).map((s) => s.price)), RARITY_ORDER[k] + ' kostar mer');
+  }
+});
+
+test('skins: katalogen och skin-paketet (js/skinpack.js) har exakt samma skins', () => {
+  const src = fs.readFileSync('js/skinpack.js', 'utf8');
+  const packIds = [...src.matchAll(/def\('(\w+)', '([\w-]+)'/g)].map((m) => m[2])
+    .concat([...src.matchAll(/\bU\('([\w-]+)'/g)].map((m) => m[1]));
+  assert.equal(packIds.length, 40);
+  assert.deepEqual(new Set(packIds), new Set(SKINS.filter((s) => s.id !== 'classic').map((s) => s.id)));
 });
 
 test('databasfilen (supabase/schema.sql) är i takt med spelet', () => {

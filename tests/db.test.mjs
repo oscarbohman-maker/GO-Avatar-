@@ -130,34 +130,55 @@ test('level räknas likadant i databasen och i spelet', () => {
 });
 
 test('shop: level-krav, pris, köp och utrustning', () => {
+  const sk = SKINS.find((x) => x.level === 3 && x.price > 0);          // ett Common-skin på level 3
   const B0 = json(B, `public.get_profile(null)`);
   assert.equal(B0.level, 1);
-  assert.match(fails(B, `select public.buy_skin('sunset')`), /level_too_low/);
-  psql(`update public.profiles set xp = ${xpForLevel(3)}, coins = 100 where id = '${B}'`);
-  assert.match(fails(B, `select public.buy_skin('sunset')`), /not_enough_coins/);
-  assert.match(fails(B, `select public.equip_skin('sunset')`), /not_owned/);
-  psql(`update public.profiles set coins = 260 where id = '${B}'`);
-  const p = json(B, `public.buy_skin('sunset')`);
-  assert.equal(p.coins, 60);
-  assert.ok(p.owned_skins.includes('sunset'));
-  const p2 = json(B, `public.buy_skin('sunset')`);       // ett andra köp kostar inget
-  assert.equal(p2.coins, 60);
-  assert.equal(json(B, `public.equip_skin('sunset')`).equipped_skin, 'sunset');
+  assert.match(fails(B, `select public.buy_skin('${sk.id}')`), /level_too_low/);
+  psql(`update public.profiles set xp = ${xpForLevel(3)}, coins = ${sk.price - 1} where id = '${B}'`);
+  assert.match(fails(B, `select public.buy_skin('${sk.id}')`), /not_enough_coins/);
+  assert.match(fails(B, `select public.equip_skin('${sk.id}')`), /not_owned/);
+  psql(`update public.profiles set coins = ${sk.price + 100} where id = '${B}'`);
+  const p = json(B, `public.buy_skin('${sk.id}')`);
+  assert.equal(p.coins, 100);
+  assert.ok(p.owned_skins.includes(sk.id));
+  const p2 = json(B, `public.buy_skin('${sk.id}')`);       // ett andra köp kostar inget
+  assert.equal(p2.coins, 100);
+  assert.equal(json(B, `public.equip_skin('${sk.id}')`).equipped_skin, sk.id);
   assert.match(fails(B, `select public.buy_skin('nope')`), /unknown_skin/);
+  // Ultra-skin kräver hög level
+  const ultra = SKINS.find((x) => x.rarity === 'ultra');
+  assert.match(fails(B, `select public.buy_skin('${ultra.id}')`), /level_too_low/);
 });
 
-test('gratis skins delas ut när man når leveln', () => {
+test('alla skins i spelet finns i databasen med samma pris och level', () => {
+  for (const s of SKINS) assert.equal(psql(`select price || '/' || min_level from public.skins where id = '${s.id}'`), `${s.price}/${s.level}`, s.id);
+});
+
+test('gratis skins (pris 0) delas ut när man når leveln', () => {
+  psql(`insert into public.skins values ('test_free5', 0, 5), ('test_free40', 0, 40)`);
   psql(`update public.profiles set xp = ${xpForLevel(12)} where id = '${B}'`);
   const p = json(B, `public.get_profile(null)`);
-  for (const s of SKINS.filter((x) => x.price === 0 && x.level <= 12)) assert.ok(p.owned_skins.includes(s.id), s.id);
-  assert.ok(!p.owned_skins.includes('legend'));
+  assert.ok(p.owned_skins.includes('test_free5'));
+  assert.ok(!p.owned_skins.includes('test_free40'));
 });
 
 test('nya skins i en belöning när man går upp i level', () => {
   psql(`update public.profiles set xp = ${xpForLevel(5) - 1}, last_award_at = null, owned_skins = array['classic'] where id = '${A}'`);
   const r = json(A, `public.award_flight('m4', 3000, 5, false)`);
   assert.ok(r.level_after >= 5 && r.level_before === 4);
-  assert.ok(r.new_skins.includes('rookie'));
+  assert.ok(r.new_skins.includes('test_free5'));
+});
+
+test('borttagna skins betalas tillbaka när databasfilen körs igen', () => {
+  psql(`insert into public.skins values ('old_skin', 150, 1)`);
+  psql(`update public.profiles set coins = 10, owned_skins = array['classic', 'old_skin'], equipped_skin = 'old_skin' where id = '${B}'`);
+  psqlFile('supabase/schema.sql');
+  const p = json(B, `public.get_profile(null)`);
+  assert.equal(p.coins, 160);
+  assert.ok(!p.owned_skins.includes('old_skin'));
+  assert.equal(p.equipped_skin, 'classic');
+  assert.equal(psql(`select count(*) from public.skins where id = 'old_skin'`), '0');
+  assert.equal(Number(psql(`select count(*) from public.skins`)), SKINS.length);
 });
 
 test('namnbyte (1–16 tecken)', () => {

@@ -5,6 +5,7 @@ import { World3D } from './world3d.js';
 import { PlaneRig } from './rig.js';
 import { CrashFX } from './crashfx.js';
 import { sfx } from './sfx.js';
+import { makeEnvMap } from './envmap.js';
 
 const V = (x = 0, y = 0, z = 0) => new THREE.Vector3(x, y, z);
 const smooth = (t) => t * t * (3 - 2 * t);
@@ -27,12 +28,15 @@ export class View3D {
     this.world = new World3D(level);
     this.world.onThunder = () => sfx.thunder();
     this.denseFog = this.seat === 'pilot';   // navigatören ser genom dimman
-    this.rig = new PlaneRig(this.seat);
+    this.rig = new PlaneRig(this.seat, { maxParticles: opts.maxParticles ?? 220, rate: opts.rate ?? 0.6 });
     this.world.scene.add(this.rig.root);
+    this.world.scene.add(this.rig.skin.group);         // skinets partikeleffekter
+    try { this.rig.setEnvMap(makeEnvMap(this.renderer)); } catch (e) { console.warn('envmap', e); }
     this.fx = new CrashFX(this.world.scene);   // kraschens effekter (bara när planet nuddar något)
     this.crash = null;
     this._shake = V();
     this.camera = new THREE.PerspectiveCamera(70, 1, 0.04, this.world.maxFar + 20);
+    this.rig.skinCam = this.camera.position;           // inga skin-partiklar runt kameran i cockpit
     this.blend = 0;          // 0 = utifrån, 1 = cockpit
     this.orbitA = 0;
     this.chasePos = null;
@@ -63,6 +67,7 @@ export class View3D {
     if (d.lengthSq() < 1e-6) d.set(0, 0, -1);
     this.crash = { pos: V(...e.pos), sev: e.sev || 1, t: 0, dir: d.normalize() };
     this.fx.burst(e);
+    this.rig.skinPulse('krasch');                      // skinets egen smäll i skinets färger
     this.rig.breakApart(e, this.fx);
   }
 

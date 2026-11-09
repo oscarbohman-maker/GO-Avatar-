@@ -10,7 +10,7 @@ import { icon, applyIcons, setIconLabel } from './icons.js';
 import { POINTS } from './sim.js';
 import { THEMES, WEATHER } from './themes.js';
 import { Account } from './account.js';
-import { SKINS, RARITY, skinById } from './skins.js';
+import { SKINS, RARITY, RARITY_ORDER, skinById } from './skins.js';
 import { levelInfo, maxScoreOf, rankOf } from './progress.js';
 
 const $ = (s, r = document) => r.querySelector(s);
@@ -1265,6 +1265,7 @@ async function openShop() {
     } catch (e) { console.warn(e); }
   }
   if (!shopSel) shopSel = mySkin();
+  shopTab = skinById(shopSel).rarity;
   renderShop();
   if (shopPreview && current === 'screen-shop') { shopPreview.setSkin(shopSel); shopPreview.start(); }
 }
@@ -1279,47 +1280,69 @@ function skinState(s) {
   return 'buy';
 }
 
+let shopTab = null;
+let thumbBusy = false;
+
 function renderShop() {
   const signed = Account.signedIn;
   $('.shop-guest').classList.toggle('hidden', signed);
   $('.shop-wallet').innerHTML = signed
     ? `<span class="wallet-lvl">${icon('zap')}Level <b>${Account.level.level}</b></span><span class="coin-pill">${icon('coin')}<b>${Account.profile.coins.toLocaleString('en-US')}</b></span>`
     : '';
+  // flikar per sällsynthet (Common, Epic, Legendary, Ultra)
+  if (!shopTab) shopTab = skinById(shopSel).rarity;
+  const lvl = Account.level ? Account.level.level : 0;
+  $('.shop-tabs').innerHTML = RARITY_ORDER.map((r) => {
+    const list = SKINS.filter((s) => s.rarity === r);
+    const owned = signed ? list.filter((s) => Account.owns(s.id)).length : 0;
+    const from = Math.min(...list.map((s) => s.level));
+    const sub = signed ? (lvl >= from ? `${owned}/${list.length} owned` : `Level ${from}+`) : `${list.length} skins`;
+    return `<button class="shop-tab" role="tab" type="button" data-r="${r}" aria-selected="${r === shopTab}" style="--rc:${RARITY[r].color}"><b>${RARITY[r].name}</b><small>${sub}</small></button>`;
+  }).join('');
+  $$('.shop-tab').forEach((b) => { b.onclick = () => { sfx.click(); shopTab = b.dataset.r; renderShop(); }; });
+
   const grid = $('.shop-grid');
   grid.innerHTML = '';
-  SKINS.forEach((s, i) => {
+  SKINS.filter((s) => s.rarity === shopTab).forEach((s, i) => {
     const st = skinState(s);
     const R = RARITY[s.rarity] || RARITY.common;
     const el = document.createElement('button');
     el.type = 'button';
-    el.className = `skin-card st-${st}` + (s.id === shopSel ? ' sel' : '');
+    el.className = `skin-card st-${st} r-${s.rarity}` + (s.id === shopSel ? ' sel' : '');
+    el.dataset.id = s.id;
     el.setAttribute('role', 'listitem');
     el.style.setProperty('--rc', R.color);
     el.style.animationDelay = (i * 0.025) + 's';
     const tag = st === 'equipped' ? `<span class="sc-tag eq">${icon('check')}Equipped</span>`
       : st === 'owned' ? '<span class="sc-tag own">Owned</span>'
         : st === 'locked' || st === 'guest' ? `<span class="sc-tag lock">${icon('lock')}Lvl ${s.level}</span>`
-          : `<span class="sc-tag price">${s.price ? icon('coin') + s.price : 'Free'}</span>`;
-    el.innerHTML = `<span class="sc-img"><img alt="" decoding="async"></span><span class="sc-body"><b>${esc(s.name)}</b><span class="sc-meta">${rarityChip(s)}${tag}</span></span>`;
+          : `<span class="sc-tag price">${s.price ? icon('coin') + s.price.toLocaleString('en-US') : 'Free'}</span>`;
+    // färgprovet syns tills bilden är klar
+    const swatch = `linear-gradient(110deg, ${s.swatch.concat(s.swatch).join(', ')})`;
+    el.innerHTML = `<span class="sc-img" style="--sw:${swatch}"><img alt="" decoding="async"></span><span class="sc-body"><b>${esc(s.name)}</b><span class="sc-meta">${rarityChip(s)}${tag}</span></span>`;
     const img = $('img', el);
     if (thumbCache[s.id]) img.src = thumbCache[s.id];
     el.onclick = () => { sfx.click(); shopSel = s.id; buyConfirm = null; if (shopPreview) shopPreview.setSkin(s.id); renderShop(); };
     grid.appendChild(el);
   });
   renderShopInfo();
-  // små bilder av skinsen, en i taget så att sidan inte hackar
-  if (shopPreview) {
-    const todo = SKINS.filter((s) => !thumbCache[s.id]);
-    const step = () => {
-      const s = todo.shift();
-      if (!s || current !== 'screen-shop') return;
-      thumbCache[s.id] = shopPreview.thumbnail(s.id);
-      const card = $$('.skin-card')[SKINS.indexOf(s)];
-      if (card) $('img', card).src = thumbCache[s.id];
-      setTimeout(step, 30);
-    };
-    if (todo.length) setTimeout(step, 60);
-  }
+  makeThumbs();
+}
+
+// små bilder av skinsen, en i taget (fliken man tittar på först) så att sidan inte hackar
+function makeThumbs() {
+  if (!shopPreview || thumbBusy) return;
+  const next = () => SKINS.filter((s) => !(s.id in thumbCache)).sort((a, b) => (a.rarity === shopTab ? 0 : 1) - (b.rarity === shopTab ? 0 : 1))[0];
+  const step = () => {
+    const s = next();
+    if (!s || current !== 'screen-shop') { thumbBusy = false; return; }
+    try { thumbCache[s.id] = shopPreview.thumbnail(s.id); } catch (e) { console.warn('thumbnail', s.id, e); thumbCache[s.id] = ''; }
+    const card = $(`.skin-card[data-id="${s.id}"]`);
+    if (card && thumbCache[s.id]) $('img', card).src = thumbCache[s.id];
+    setTimeout(step, 30);
+  };
+  thumbBusy = true;
+  setTimeout(step, 60);
 }
 
 function renderShopInfo() {

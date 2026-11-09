@@ -1041,3 +1041,19 @@ body.touch .ai-hint { display: none; }
   .shop-wallet { width: 100%; justify-content: flex-start; margin-left: 0; }
 }
 .menu-row:has(#btn-shop.hidden) { grid-template-columns: 1fr; }
+
+/* shop: flikar per sällsynthet och skin-kort i sällsynthetens färg */
+.shop-list { display: flex; flex-direction: column; gap: 10px; min-width: 0; }
+.shop-tabs { display: grid; grid-template-columns: repeat(4, 1fr); gap: 4px; padding: 4px; border-radius: 14px; background: rgba(0,0,0,.25); border: 1px solid var(--line); }
+.shop-tab { appearance: none; border: 0; border-radius: 10px; padding: 7px 4px; background: transparent; color: var(--muted); cursor: pointer; display: flex; flex-direction: column; align-items: center; gap: 1px; transition: background .2s, color .2s; }
+.shop-tab b { font-size: 13px; color: color-mix(in srgb, var(--rc) 55%, white); }
+.shop-tab small { font-size: 10px; }
+.shop-tab:hover { background: rgba(255,255,255,.06); }
+.shop-tab[aria-selected="true"] { background: color-mix(in srgb, var(--rc) 22%, transparent); box-shadow: inset 0 -3px 0 var(--rc); color: var(--text); }
+.sc-img { background: var(--sw, none), radial-gradient(100% 90% at 50% 30%, color-mix(in srgb, var(--rc) 22%, #16305f), #0b1a3a); background-size: 220% 100%, auto; }
+.sc-img:has(img[src]) { background: radial-gradient(100% 90% at 50% 30%, color-mix(in srgb, var(--rc) 22%, #16305f), #0b1a3a); }
+.skin-card.r-legendary .sc-img, .skin-card.r-ultra .sc-img { animation: swatchMove 4s linear infinite; }
+@keyframes swatchMove { to { background-position: 220% 0, 0 0; } }
+.skin-card.r-ultra { box-shadow: 0 0 0 1px color-mix(in srgb, var(--rc) 35%, transparent), 0 6px 20px color-mix(in srgb, var(--rc) 25%, transparent); }
+.rar { color: color-mix(in srgb, var(--rc) 55%, white); }
+.shop-canvas { cursor: pointer; }

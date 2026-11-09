@@ -72,7 +72,7 @@ Man får mynt motsvarande halva XP:n. XP minskar aldrig, men mynt används i sho
 
 **Level:** för att gå från level L till L+1 krävs 100 + 40·(L−1) XP, alltså 100, 140, 180 och så vidare. Högsta level är 50 (51 940 XP). En bra första runda på alla banor ger ungefär 12 500 XP (level 24) och 6 300 mynt.
 
-**Shop:** varje skin har ett level-krav och ett pris. Man måste nå leveln och sedan köpa skinet, och köpet bekräftas med ett andra tryck. Några skins är gratis och läggs till automatiskt när man når deras level (5, 12 och 40). Det valda skinet syns på planet för båda spelarna när du flyger, och i co-op visas pilotens skin.
+**Shop:** 40 skins från Claude Design i fyra sällsyntheter: Common (färg och mönster), Epic (metall, glöd och spår), Legendary (animerade texturer, drakvingar, eld och blixtar) och Ultra (helt ombyggda modeller som rymdskepp, drake, UFO och svart hål). Varje skin har ett level-krav och ett pris: Common level 1–4, Epic 5–14, Legendary 15–28 och Ultra 30–48. Man måste nå leveln och sedan köpa skinet, och köpet bekräftas med ett andra tryck. Shopen visar planet i 3D med alla effekter, och trycker man på planet kommer skinets effektsmäll. Det valda skinet syns på planet när du flyger, i co-op för båda spelarna (pilotens skin). Från cockpit skyms sikten aldrig av effekterna. Mer om skinsen finns i [docs/SKINS.md](docs/SKINS.md).
 
 **Säkerhet:** databasen räknar själv ut XP och mynt och kontrollerar köp. Spelaren kan bara läsa sin egen profil. Orimliga poäng och för täta resultat (under 20 sekunder isär) avvisas.
 
@@ -85,7 +85,7 @@ Man får mynt motsvarande halva XP:n. XP minskar aldrig, men mynt används i sho
 
 Supabases gratisplan skickar bara ett fåtal inloggningsmejl i timmen. Fler kräver egen e-postserver (SMTP) under **Authentication → Emails**.
 
-Skinens format för designers finns i [docs/SKINS.md](docs/SKINS.md). Om man ändrar banor eller skins kör man `node tools/gen-sql.mjs` och sedan den nya `supabase/schema.sql` i Supabase. Spelarnas data behålls.
+Om man ändrar banor eller skins kör man `node tools/gen-sql.mjs` och sedan den nya `supabase/schema.sql` i Supabase. Spelarnas data behålls.
 
 ## Fysik
 
@@ -137,12 +137,14 @@ js/storage.js     Profil, inställningar och rekord
 js/sfx.js         Ljudeffekter
 tests/            Automatiska test
 js/progress.js    Level, XP, mynt och betyg (samma regler som databasen)
-js/skins.js       Planets skins (färger per del, pris, level-krav)
+js/skins.js       Skin-katalogen (namn, sällsynthet, pris, level-krav)
+js/skinpack.js    Skinens utseende och effekter (från Claude Design)
+js/envmap.js      Omgivningsljus för reflexer på planet
 js/account.js     Konto via Supabase: inloggning, profil, belöningar, köp
 js/config.js      Supabase-adress och publik nyckel
 js/shopview.js    Shopens roterande 3D-plan och skinbilder
 supabase/         Databasen: tabeller, regler och funktioner (schema.sql)
-docs/SKINS.md     Skinformatet för designers
+docs/SKINS.md     Skinsen: filer, format och hur man lägger till ett skin
 img/maps/         Kartornas miniatyrbilder
 tools/            Rendera miniatyrbilder, skapa schema.sql
 ```

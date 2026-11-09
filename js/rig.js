@@ -3,7 +3,8 @@
 import * as THREE from './lib/three.module.min.js';
 import { buildPlane, buildCockpit } from './models.js';
 import { Avatar, AVATAR_STYLES } from './avatar.js';
-import { skinById, partOf, partStyle, DEFAULT_SKIN } from './skins.js';
+import { skinById, DEFAULT_SKIN } from './skins.js';
+import { createSkinSystem } from './skinpack.js';
 
 const V = (x = 0, y = 0, z = 0) => new THREE.Vector3(x, y, z);
 // Var cockpiten sitter i förhållande till planets tyngdpunkt (nosen är 6 m fram)
@@ -11,8 +12,15 @@ export const COCKPIT_OFFSET = V(0, -0.9, -4.6);
 
 export class PlaneRig {
   // localSeat: 'pilot' | 'copilot' – vems huvud som är kameran (döljs)
-  constructor(localSeat = 'pilot') {
+  // opts: { maxParticles, rate } – budget för skinens partikeleffekter
+  constructor(localSeat = 'pilot', opts = {}) {
     this.localSeat = localSeat;
+    // skinens effekter: partiklarna ligger i skin.group, som ägaren lägger i sin scen
+    this.skin = createSkinSystem({ maxParticles: opts.maxParticles ?? 220, rate: opts.rate ?? 0.6 });
+    this.skinId = DEFAULT_SKIN;
+    this.skinTrail = 0;        // spårfart när planet står still (shopen); 0 i spelet där planet flyger på riktigt
+    this.skinCam = null;       // kamerans position: inga partiklar skapas nära den i cockpit
+    this.envMap = null;
     this.root = new THREE.Group(); this.root.name = 'plan_rig';
     this.root.rotation.order = 'YXZ';
 
@@ -51,36 +59,52 @@ export class PlaneRig {
     this.idle = { t: 0, yaw: 0, pitch: -0.2, next: 2 };
     this.view = 'cockpit';
     this.time = 0;
-    this.setSkin(DEFAULT_SKIN);
+    this._markBase();
   }
 
   _get(n) { return this.cockpit.getObjectByName(n); }
 
-  // Skin: färgar planets yttre delar (kropp, vingar, stjärt, motorer, detaljer, propellrar).
-  // Varje del får ett eget material så att skinet inte påverkar cockpiten eller andra plan.
+  // Skin: bygger om planet och klär det i skinet (färger, texturer, extra delar och effekter).
+  // Standardplanet ("classic") är modellen som den är.
   setSkin(id) {
-    const skin = skinById(id || DEFAULT_SKIN);
-    if (this.skinId === skin.id) return;
-    this.skinId = skin.id;
-    if (this._skinMats) Object.values(this._skinMats).forEach((m) => m.dispose());
-    const mats = {};
-    const matFor = (part) => {
-      if (mats[part]) return mats[part];
-      const st = partStyle(skin, part);
-      const m = new THREE.MeshStandardMaterial({
-        name: 'skin_' + part, color: new THREE.Color(st.c), roughness: st.r ?? 0.5, metalness: st.m ?? 0,
-        emissive: new THREE.Color(st.e || 0x000000), emissiveIntensity: st.e ? (st.ei ?? 1) : 0,
-      });
-      if (part === 'body') m.side = THREE.DoubleSide;     // kroppen är ett öppet skal
-      return (mats[part] = m);
-    };
-    this.exterior.traverse((o) => {
-      if (!o.isMesh) return;
-      const part = partOf(o.name);
-      if (part) o.material = matFor(part);
+    id = skinById(id || DEFAULT_SKIN).id;
+    if (this.skinId === id) return;
+    this.skinId = id;
+    const old = this.exterior;
+    const plane = buildPlane();
+    this.exteriorWrap.remove(old);
+    this.exteriorWrap.add(plane);
+    this.exterior = plane;
+    // gamla planets geometri och material frigörs (texturerna är delade och ligger kvar)
+    old.traverse((o) => {
+      if (o.geometry) o.geometry.dispose();
+      if (o.material) (Array.isArray(o.material) ? o.material : [o.material]).forEach((m) => m.dispose());
     });
-    this._skinMats = mats;
+    this.root.updateMatrixWorld(true);
+    this._markBase();
+    this.skin.dress(plane, id);
+    this.exterior.children.forEach((c) => { if (!c.userData.base) c.userData.skinExtra = true; });
+    this.props = ['propeller_h', 'propeller_v'].map((n) => this.exterior.getObjectByName(n));
+    this._applyEnv();
   }
+
+  _markBase() { this.exterior.children.forEach((c) => { c.userData.base = true; }); }
+
+  // Omgivningsljus (reflexer) för planets material, så att metall och blank lack syns som i designen
+  setEnvMap(tex) { this.envMap = tex; this._applyEnv(); }
+  _applyEnv() {
+    if (!this.envMap) return;
+    this.exterior.traverse((o) => {
+      const ms = o.material ? (Array.isArray(o.material) ? o.material : [o.material]) : [];
+      ms.forEach((m) => {
+        if (!m.isMeshStandardMaterial || m.envMap) return;
+        m.envMap = this.envMap; m.envMapIntensity = 0.55; m.needsUpdate = true;
+      });
+    });
+  }
+
+  // Skinets "smäll" vid krasch (färgade partiklar i skinets färger)
+  skinPulse(kind) { this.skin.pulse(kind); }
 
   // Krasch: den del som träffade lossnar som skrot. Vid hård träff (sev >= 0.8) slås hela planet sönder.
   // Skrotet är kopior av modellens delar (delar geometri och material) som läggs i kraschens effekter.
@@ -93,15 +117,28 @@ export class PlaneRig {
       body: Math.random() < 0.5 ? ['motor_h', 'motorring_h', 'spinner_h', 'propeller_h'] : ['motor_v', 'motorring_v', 'spinner_v', 'propeller_v'],
     };
     const full = (e.sev || 0) >= 0.8;
-    const names = full ? this.exterior.children.map((c) => c.name) : (SIDE[e.part] || []);
+    this.root.updateMatrixWorld(true);
+    const objs = full ? this.exterior.children.slice() : (SIDE[e.part] || []).map((nm) => this.exterior.getObjectByName(nm));
+    if (!full) {
+      // skinets extra delar (drakvingar, kanoner …) som sitter på den sida som träffades
+      const box = new THREE.Box3(), c = new THREE.Vector3();
+      const hit = { 'right wing': (q) => q.z > 1.5, 'left wing': (q) => q.z < -1.5, tail: (q) => q.x < -3.5, nose: (q) => q.x > 3.5 }[e.part];
+      if (hit) {
+        for (const ch of this.exterior.children) {
+          if (!ch.userData.skinExtra || !ch.visible) continue;
+          box.setFromObject(ch);
+          if (box.isEmpty()) continue;
+          box.getCenter(c);
+          if (hit(this.exterior.worldToLocal(c))) objs.push(ch);
+        }
+      }
+    }
     const p = new THREE.Vector3(...e.pos), n = new THREE.Vector3(...(e.n || [0, 1, 0]));
     const dir = new THREE.Vector3(...(e.dir || [0, 0, -1]));
     const td = dir.clone().addScaledVector(n, -dir.dot(n));
     const speed = e.speed || 40;
-    this.root.updateMatrixWorld(true);
     const wp = new THREE.Vector3(), wq = new THREE.Quaternion(), ws = new THREE.Vector3();
-    for (const nm of names) {
-      const obj = this.exterior.getObjectByName(nm);
+    for (const obj of objs) {
       if (!obj || !obj.visible) continue;
       obj.matrixWorld.decompose(wp, wq, ws);
       const copy = obj.clone();                           // delar geometri och material med originalet
@@ -117,7 +154,9 @@ export class PlaneRig {
 
   // Ny start: alla delar tillbaka på planet
   restoreParts() {
-    this.exterior.children.forEach((c) => { c.visible = true; });
+    // delar som skinet döljer (t.ex. originalvingarna under drakvingar) förblir dolda
+    this.exterior.traverse((c) => { if (c !== this.exterior) c.visible = !c.userData.skinHidden; });
+    this.skin.clear();
   }
 
   // Tillägg till cockpitmodellen (originalet i models.js är orört): referensmodellen
@@ -255,6 +294,13 @@ export class PlaneRig {
     const spin = (st.phase === 'crashed' ? 4 : 30 + st.speed * 0.9);
     this.props.forEach((p, i) => { if (p) p.rotation.x += (i ? -1 : 1) * spin * dt; });
 
+    // skinets animationer och effekter (inga partiklar vid kameran när man sitter i cockpit)
+    R.updateMatrixWorld(true);
+    this.skin.update(dt, {
+      fly: st.phase === 'fly', alive: st.phase !== 'crashed', trail: this.skinTrail,
+      exclude: this.view === 'cockpit' ? this.skinCam : null, excludeR: 6,
+    });
+
     // rattarna följer spaken (rollen = vrid, tippning = in/ut)
     const ix = st.ix || 0, iy = st.iy || 0;
     this.yokes.forEach((y, i) => {
@@ -382,6 +428,7 @@ export class PlaneRig {
   }
 
   dispose() {
+    this.skin.dispose();
     this.pilot.dispose(); this.copilot.dispose();
     this.root.traverse((o) => {
       if (o.geometry) o.geometry.dispose();
