@@ -52,6 +52,12 @@ Kartorna är seedade, så båda spelarna får exakt samma bana. Varje karta har 
 
 **På mobil och små skärmar** blir spelvyn kompakt, så att man ser så mycket som möjligt av banan. Tid, port, poäng och stjärnor visas i en smal rad med ikoner, och fart och höjd i en liten rad längst ned. Röst, omstart och avsluta ligger bakom ⋯-knappen. Styrspaken och BOOST/BRAKE är mindre och genomskinliga. Navigatörens order visas på en rad längst ned och bleknar bort. Belöningar och combo visas som små, korta popups högt upp, så att de inte skymmer vägen.
 
+**Cutscene vid starten:** varje gång man startar en bana spelas en kort filmisk intro på cirka 7 sekunder, med svarta filmremsor upptill och nedtill och en Skip-knapp. Det finns två kameravinklar:
+1. En kamera följer planet snett bakifrån medan det flyger in mot banan och vinkar med vingarna, och kartans namn, värld, svårighet och väder visas.
+2. En dashcam från instrumentbrädan visar besättningen, som säger varsin rolig replik (navigatören kommenterar världen) medan navigatören pekar framåt.
+
+Sedan klipper bilden tillbaka till följekameran, som mjukt glider bakom planet och in i cockpit under nedräkningen. Planet flyger hela tiden in mot startlinjen och når den precis på GO. Med en vän spelar båda cutscenen samtidigt. Efter en krasch, eller med Restart, börjar man om utan cutscene, men planet flyger fortfarande in under nedräkningen.
+
 **Styrning för piloten:** W/S eller ↑/↓ för upp/ner, A/D eller ←/→ för att banka och svänga, Mellanslag för gas, Shift för broms och Q/E för att titta runt. På mobil finns en styrspak till vänster och knappar till höger, och man drar på högra delen av skärmen för att titta runt.
 
 ## Konto, level och shop
@@ -140,6 +146,8 @@ js/progress.js    Level, XP, mynt och betyg (samma regler som databasen)
 js/skins.js       Skin-katalogen (namn, sällsynthet, pris, level-krav)
 js/skinpack.js    Skinens utseende och effekter (från Claude Design)
 js/envmap.js      Omgivningsljus för reflexer på planet
+js/cutscene.js    Intro-cutscenen vid starten av varje bana
+js/lib/post/      Glöd (bloom) från three.js r170 (MIT)
 js/account.js     Konto via Supabase: inloggning, profil, belöningar, köp
 js/config.js      Supabase-adress och publik nyckel
 js/shopview.js    Shopens roterande 3D-plan och skinbilder

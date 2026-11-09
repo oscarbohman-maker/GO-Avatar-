@@ -36,11 +36,14 @@ These are the same fields as in the design package:
 ### What was adapted for the game
 
 - **Updates:** the effects are updated by the game's own frame loop, not a separate loop.
-- **Particles:** they are reused and capped at 220 in the game and 600 in the shop, so phones don't stutter.
+- **Particles:** they are reused and capped so phones don't stutter: 220 in the game (400 for Legendary and Ultra on computers, 280 on phones) and 600 in the shop.
 - **Cockpit:** no particles are created within 6 m of the cockpit camera, so the view is never blocked.
 - **Crashes:** parts a skin hides stay hidden after a crash, and a skin's extra parts on the side that was hit break off.
 - **Pilot's skin:** both players see it in co-op.
-- **Collisions:** they always use the standard plane's shape, so even big Ultra models get a fair hitbox.
+- **Same size:** every skin is scaled so that, seen from above, it reaches no further from the center than the standard plane, even while its parts spin, orbit or flap. What you see matches what you collide with (the standard plane's hitbox) for every skin.
+- **Sharper textures:** they are drawn at 2× resolution on computers and 1.5× on phones and tablets, with stronger texture filtering. The shop cards are rendered at 2×.
+- **Legendary and Ultra:** they get soft, continuous light trails from the wingtips (and the tail on Ultra) in the skin's own colors, about 35–50 % more particles, slightly bigger effects, and their own burst when the plane flies through a ring.
+- **Glow (bloom):** anything that really glows gets a halo. It is on in the shop, in the intro cutscene and in the game on computers, and off in the game on phones to save power.
 
 ## Adding or changing a skin
 

@@ -14,6 +14,10 @@ import * as THREE from './lib/three.module.min.js';
 // texturer ritas en gång och delas av alla vyer (spelet, navigatören, shopen)
 const texCache = new Map();
 const texClones = new Map();
+// högre upplösning på texturerna (skarpare skins): 2× på dator, 1,5× på pekskärm (mindre minne)
+const TEX_SCALE = typeof matchMedia === 'function' && matchMedia('(pointer: coarse)').matches ? 1.5 : 2;
+// standardplanets mått (räknas fram första gången): alla skins får plats inom dem
+let REF = null;
 
 export function createSkinSystem(opts = {}) {
   const V = (x = 0, y = 0, z = 0) => new THREE.Vector3(x, y, z);
@@ -30,19 +34,22 @@ export function createSkinSystem(opts = {}) {
   function canvasTex(key, w, h, draw) {
     if (texCache.has(key)) return texCache.get(key);
     if (typeof document === 'undefined') return null;     // utan webbläsare (testerna i Node) ritas inga texturer
-    const c = document.createElement('canvas'); c.width = w; c.height = h;
-    draw(c.getContext('2d'), w, h);
+    const c = document.createElement('canvas'); c.width = Math.round(w * TEX_SCALE); c.height = Math.round(h * TEX_SCALE);
+    const g = c.getContext('2d');
+    g.scale(c.width / w, c.height / h);                    // ritkoden använder samma mått som förut
+    draw(g, w, h);
     const t = new THREE.CanvasTexture(c);
-    t.colorSpace = THREE.SRGBColorSpace; t.wrapS = t.wrapT = THREE.RepeatWrapping; t.anisotropy = 4;
+    t.colorSpace = THREE.SRGBColorSpace; t.wrapS = t.wrapT = THREE.RepeatWrapping; t.anisotropy = 8;
     texCache.set(key, t); return t;
   }
   const wrapX = (w, x, fn) => { fn(x); fn(x - w); fn(x + w); };
   // pixelbaserad textur: fn(u, v) → [r, g, b] (u runt kroppen, v längs kroppen: 0 = stjärt, 1 = nos)
   function field(key, w, h, fn, after) {
     return canvasTex(key, w, h, (g) => {
-      const img = g.createImageData(w, h), d = img.data;
-      for (let y = 0; y < h; y++) for (let x = 0; x < w; x++) {
-        const c = fn(x / w, 1 - y / h), i = (y * w + x) * 4;
+      const W = g.canvas.width, Hh = g.canvas.height;
+      const img = g.createImageData(W, Hh), d = img.data;
+      for (let y = 0; y < Hh; y++) for (let x = 0; x < W; x++) {
+        const c = fn(x / W, 1 - y / Hh), i = (y * W + x) * 4;
         d[i] = c[0]; d[i + 1] = c[1]; d[i + 2] = c[2]; d[i + 3] = 255;
       }
       g.putImageData(img, 0, 0);
@@ -289,7 +296,92 @@ export function createSkinSystem(opts = {}) {
       if (p.spin) p.s.material.rotation += p.spin * dt;
     }
   }
-  function clearP() { while (P.length) killP(0); }
+  function clearP() { while (P.length) killP(0); ribbons.forEach((r) => { r.pts.length = 0; }); }
+
+  /* ───────── ljusband: mjuka, sammanhängande spår (Legendary och Ultra) ───────── */
+  const RIB_N = 46;
+  let ribbons = [];
+  function makeRibbon(color, width, intensity) {
+    const geo = new THREE.BufferGeometry();
+    const pos = new Float32Array(RIB_N * 6), col = new Float32Array(RIB_N * 6), idx = [];
+    for (let i = 0; i < RIB_N - 1; i++) { const a = i * 2; idx.push(a, a + 1, a + 2, a + 1, a + 3, a + 2); }
+    geo.setIndex(idx);
+    geo.setAttribute('position', new THREE.BufferAttribute(pos, 3).setUsage(THREE.DynamicDrawUsage));
+    geo.setAttribute('color', new THREE.BufferAttribute(col, 3).setUsage(THREE.DynamicDrawUsage));
+    const mesh = new THREE.Mesh(geo, new THREE.MeshBasicMaterial({ vertexColors: true, transparent: true, blending: ADD, depthWrite: false, side: DS, toneMapped: false }));
+    mesh.frustumCulled = false; mesh.name = 'ljusband';
+    vfx.add(mesh);
+    return { mesh, pts: [], color: new THREE.Color(color), width, intensity };
+  }
+  function clearRibbons() { ribbons.forEach((r) => { vfx.remove(r.mesh); r.mesh.geometry.dispose(); r.mesh.material.dispose(); }); ribbons = []; }
+  const _side = V(), _a = V();
+  function updateRibbons(c, dt, alive) {
+    const LIFE = 0.5;
+    for (const r of ribbons) {
+      // äldre punkter åldras (och dras bakåt när planet står still i shopen)
+      for (const q of r.pts) { q.age += dt; q.p.addScaledVector(trailV, dt); }
+      while (r.pts.length && r.pts[r.pts.length - 1].age > LIFE) r.pts.pop();
+      if (alive && c) {
+        _a.set(...r.at); c.plane.localToWorld(_a);
+        _side.set(0, 0, 1).applyQuaternion(c.wq).multiplyScalar(r.width * 0.5 * (c.scale || 1));
+        const head = r.pts[0];
+        if (!head || head.p.distanceToSquared(_a) > 0.04 || head.age > 0.03) {
+          r.pts.unshift({ p: _a.clone(), s: _side.clone(), age: 0 });
+          if (r.pts.length > RIB_N) r.pts.length = RIB_N;
+        } else { head.p.copy(_a); head.s.copy(_side); }
+      }
+      const pa = r.mesh.geometry.attributes.position.array, ca = r.mesh.geometry.attributes.color.array;
+      const n = r.pts.length;
+      for (let i = 0; i < RIB_N; i++) {
+        const q = r.pts[Math.min(i, n - 1)];
+        const j = i * 6;
+        if (!q || i >= n) { pa.fill(0, j, j + 6); ca.fill(0, j, j + 6); continue; }
+        const k = n > 1 ? i / (n - 1) : 0;
+        const fade = Math.pow(1 - k, 1.4) * Math.max(0, 1 - q.age / LIFE) * r.intensity;
+        const wk = 1 - k * 0.65;                         // smalnar av bakåt
+        pa[j] = q.p.x + q.s.x * wk; pa[j + 1] = q.p.y + q.s.y * wk; pa[j + 2] = q.p.z + q.s.z * wk;
+        pa[j + 3] = q.p.x - q.s.x * wk; pa[j + 4] = q.p.y - q.s.y * wk; pa[j + 5] = q.p.z - q.s.z * wk;
+        ca[j] = ca[j + 3] = r.color.r * fade; ca[j + 1] = ca[j + 4] = r.color.g * fade; ca[j + 2] = ca[j + 5] = r.color.b * fade;
+      }
+      r.mesh.geometry.attributes.position.needsUpdate = true;
+      r.mesh.geometry.attributes.color.needsUpdate = true;
+    }
+  }
+
+  /* ───────── samma storlek som standardplanet ───────── */
+  // planets utbredning i planets egna koordinater (bara det som syns; ljusstrålar, glorior och partiklar räknas inte)
+  const SKIP = new Set(['dragstrale', 'jet', 'warpring', 'strale', 'korona', 'halo']);
+  function measure(plane) {
+    plane.updateMatrixWorld(true);
+    const inv = new THREE.Matrix4().copy(plane.matrixWorld).invert();
+    const box = new THREE.Box3(), tmp = new THREE.Box3(), m = new THREE.Matrix4();
+    plane.traverse((o) => {
+      if (!o.isMesh || !o.geometry || SKIP.has(o.name)) return;
+      for (let q = o; q && q !== plane; q = q.parent) if (!q.visible) return;
+      if (!o.geometry.boundingBox) o.geometry.computeBoundingBox();
+      m.multiplyMatrices(inv, o.matrixWorld);
+      tmp.copy(o.geometry.boundingBox).applyMatrix4(m);
+      box.union(tmp);
+    });
+    return box;
+  }
+  // hur långt ut från planets mitt (sett ovanifrån) något når – samma oavsett hur delarna snurrar eller kretsar
+  const _c = V(), _m = new THREE.Matrix4();
+  function reach(plane) {
+    plane.updateMatrixWorld(true);
+    const inv = new THREE.Matrix4().copy(plane.matrixWorld).invert();
+    let R = 0;
+    plane.traverse((o) => {
+      if (!o.isMesh || !o.geometry || SKIP.has(o.name)) return;
+      for (let q = o; q && q !== plane; q = q.parent) if (!q.visible) return;
+      if (!o.geometry.boundingSphere) o.geometry.computeBoundingSphere();
+      const bs = o.geometry.boundingSphere;
+      _m.multiplyMatrices(inv, o.matrixWorld);
+      _c.copy(bs.center).applyMatrix4(_m);
+      R = Math.max(R, Math.hypot(_c.x, _c.z) + bs.radius * _m.getMaxScaleOnAxis());
+    });
+    return R;
+  }
 
   /* ───────── byggstenar ───────── */
   const std = (c, o = {}) => new THREE.MeshStandardMaterial({ color: c, roughness: 0.45, metalness: 0, ...o });
@@ -1000,9 +1092,11 @@ export function createSkinSystem(opts = {}) {
     return m;
   }
   let cur = null;
+  const RARE = { legendary: { rate: 1.35, size: 1.15, ribbon: 0.32, glow: 1.25 }, ultra: { rate: 1.5, size: 1.2, ribbon: 0.45, glow: 1.5 } };
   function dress(plane, id) {
     const skin = byId[id] || null;
-    cur = null; clearP();
+    cur = null; clearP(); clearRibbons();
+    if (!REF) REF = reach(plane);                     // standardplanet, innan något ändras
     if (!skin) return plane;
     const Pn = skin.paint || {}, hide = new Set(skin.hide || []);
     const spec = {
@@ -1018,8 +1112,9 @@ export function createSkinSystem(opts = {}) {
       mats[slot] = mats[slot] || makeMat(sp, slot, skin.id);
       o.material = mats[slot];
     });
-    const c = { plane, skin, mats, ex: {}, t: 0, boost: 1, wq: new THREE.Quaternion(), shadowFixed: false,
-      emitters: (skin.fx || []).map(e => ({ ...e, acc: 0 })) };
+    const rare = RARE[skin.rarity];
+    const c = { plane, skin, mats, ex: {}, t: 0, boost: 1, wq: new THREE.Quaternion(), shadowFixed: false, scale: 1, sizeK: rare ? rare.size : 1,
+      emitters: (skin.fx || []).map(e => ({ ...e, acc: 0, rate: e.rate * (rare ? rare.rate : 1) })) };
     const maps = new Set(); Object.values(mats).forEach(m => { if (m.map) maps.add(m.map); if (m.emissiveMap) maps.add(m.emissiveMap); });
     c.scroll = (dx, dy) => maps.forEach(t => { t.offset.x = (t.offset.x + dx) % 1; t.offset.y = (t.offset.y + dy) % 1; });
     c.glow = k => Object.values(mats).forEach(m => { if (m.emissiveMap) m.emissiveIntensity = m.userData.ei * k; });
@@ -1031,6 +1126,21 @@ export function createSkinSystem(opts = {}) {
     };
     plane.updateMatrixWorld(true);
     if (skin.build) skin.build(c, H);
+    // samma storlek som standardplanet: det man ser stämmer med det man krockar med
+    const k = Math.min(1, REF / Math.max(reach(plane), 1e-3));
+    if (k < 0.995) { plane.scale.setScalar(k); plane.updateMatrixWorld(true); }
+    const box = measure(plane);
+    c.scale = k;
+    // ljusband från vingspetsarna (och stjärten på Ultra) i skinets färger
+    if (rare) {
+      const cols = skin.swatch.map((x) => new THREE.Color(x)).sort((a, b) => (b.r + b.g + b.b) * (0.5 + b.getHSL({}).s) - (a.r + a.g + a.b) * (0.5 + a.getHSL({}).s));
+      const cx = (box.min.x + box.max.x) / 2 - (box.max.x - box.min.x) * 0.1, cy = (box.min.y + box.max.y) / 2;
+      const zt = Math.max(-box.min.z, box.max.z) * 0.92;
+      const add = (at, col, w) => { const r = makeRibbon(col.clone().multiplyScalar(rare.glow), w, 1); r.at = at; ribbons.push(r); };
+      add([cx, cy, zt], cols[0], rare.ribbon);
+      add([cx, cy, -zt], cols[Math.min(1, cols.length - 1)], rare.ribbon);
+      if (skin.rarity === 'ultra') add([box.min.x + 0.3, cy, 0], cols[Math.min(2, cols.length - 1)], rare.ribbon * 1.3);
+    }
     cur = c;
     return plane;
   }
@@ -1046,7 +1156,7 @@ export function createSkinSystem(opts = {}) {
     if (fly && e.trail !== false) vel.addScaledVector(trailV, (e.trailSpeed ?? 14) / 14);
     const col = v => (typeof v === 'function' ? v(c.t) : v);
     const star = e.tex === 'star';
-    emit({ pos, vel, life: R(...e.life), size: R(...e.size) * c.boost, grow: e.grow, c0: col(e.c0), c1: col(e.c1 ?? e.c0), op: e.op, add: e.add, grav: e.grav, drag: e.drag, tex: star ? starTex : glowTex, spin: star ? R(-3, 3) : 0 });
+    emit({ pos, vel, life: R(...e.life), size: R(...e.size) * c.boost * c.sizeK * c.scale, grow: e.grow, c0: col(e.c0), c1: col(e.c1 ?? e.c0), op: e.op, add: e.add, grav: e.grav, drag: e.drag, tex: star ? starTex : glowTex, spin: star ? R(-3, 3) : 0 });
   }
   // state: { fly: planet flyger, alive: planet är helt (inte kraschat), trail: spårfart när planet står still,
   //         exclude: punkt (världen) där inga partiklar får skapas, excludeR: radie }
@@ -1070,7 +1180,8 @@ export function createSkinSystem(opts = {}) {
         });
       }
       c.boost += (1 - c.boost) * Math.min(1, dt * 1.5);
-    }
+      updateRibbons(c, dt, alive);
+    } else updateRibbons(null, dt, false);
     updateP(dt);
   }
 
@@ -1079,7 +1190,7 @@ export function createSkinSystem(opts = {}) {
     const c = cur; if (!c || !c.plane.parent) return;
     c.boost = kind === 'krasch' ? 3 : 2.2;
     const center = c.plane.getWorldPosition(V()), cols = c.skin.swatch;
-    const n = kind === 'krasch' ? 90 : 50;
+    const n = kind === 'krasch' ? 90 : kind === 'ring' ? 36 : 50;
     for (let i = 0; i < n; i++) {
       const d = V(R(-1, 1), R(-0.6, 1), R(-1, 1)).normalize();
       emit({ pos: center.clone().add(d.clone().multiplyScalar(R(0.5, 2))), vel: d.multiplyScalar(R(6, 16)), life: R(0.5, 1.1), size: R(0.4, 0.8), grow: 0.6, drag: 1.6,
@@ -1094,7 +1205,8 @@ export function createSkinSystem(opts = {}) {
     update,
     pulse,
     clear: () => { clearP(); },
+    rarity: () => (cur ? cur.skin.rarity : null),
     setBudget(max, rate) { maxP = max; rateMul = rate; while (P.length > maxP) killP(0); },
-    dispose() { cur = null; clearP(); free.forEach((sp) => { sp.material.dispose(); vfx.remove(sp); }); free.length = 0; },
+    dispose() { cur = null; clearP(); clearRibbons(); free.forEach((sp) => { sp.material.dispose(); vfx.remove(sp); }); free.length = 0; },
   };
 }

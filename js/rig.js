@@ -16,7 +16,8 @@ export class PlaneRig {
   constructor(localSeat = 'pilot', opts = {}) {
     this.localSeat = localSeat;
     // skinens effekter: partiklarna ligger i skin.group, som ägaren lägger i sin scen
-    this.skin = createSkinSystem({ maxParticles: opts.maxParticles ?? 220, rate: opts.rate ?? 0.6 });
+    this.budget = { max: opts.maxParticles ?? 220, rate: opts.rate ?? 0.6, highMax: opts.highMax ?? opts.maxParticles ?? 220, highRate: opts.highRate ?? opts.rate ?? 0.6 };
+    this.skin = createSkinSystem({ maxParticles: this.budget.max, rate: this.budget.rate });
     this.skinId = DEFAULT_SKIN;
     this.skinTrail = 0;        // spårfart när planet står still (shopen); 0 i spelet där planet flyger på riktigt
     this.skinCam = null;       // kamerans position: inga partiklar skapas nära den i cockpit
@@ -86,6 +87,14 @@ export class PlaneRig {
     this.exterior.children.forEach((c) => { if (!c.userData.base) c.userData.skinExtra = true; });
     this.props = ['propeller_h', 'propeller_v'].map((n) => this.exterior.getObjectByName(n));
     this._applyEnv();
+    // Legendary och Ultra får fler partiklar
+    const high = ['legendary', 'ultra'].includes(this.skin.rarity());
+    this.skin.setBudget(high ? this.budget.highMax : this.budget.max, high ? this.budget.highRate : this.budget.rate);
+  }
+
+  // Cutscenen visar båda figurernas ansikten; i förstaperson är det egna huvudet dolt (kameran sitter där)
+  showCrew(on) {
+    (this.localSeat === 'pilot' ? this.pilot : this.copilot).setHeadVisible(!!on);
   }
 
   _markBase() { this.exterior.children.forEach((c) => { c.userData.base = true; }); }

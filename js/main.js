@@ -764,6 +764,61 @@ function countdownDisplay(g, snap) {
   }
 }
 
+// ---- cutscene vid början av banan
+// Repliker: navigatören kommenterar världen, piloten svarar. Samma för båda spelarna (väljs efter kartan).
+const NAV_LINES = {
+  canyon: ['Training day! Hit the gates, not the walls.', "I'll be your eyes. Try to listen this time!"],
+  forest: ['I see trees. Lots of trees. You see… nothing. Perfect team!', 'Pine walls on both sides. Stay in the middle!'],
+  desert: ["It's 40 degrees out there. Try not to land in a cactus.", 'Sand, sun and stone walls. What a view! For me.'],
+  jungle: ["If you hear monkeys, that's not me. Probably.", 'Thick jungle ahead. I can see the temple walls!'],
+  redrock: ['Rocks fall from the sky here. Totally normal.', 'Red cliffs everywhere. Keep your wings in!'],
+  arctic: ['Brr! Keep the heater on and the wings off the ice.', "Snow, ice and wind. I'll call every turn!"],
+  lava: ['Fun fact: the floor is lava. Literally.', "It's getting hot in here. Don't touch anything orange!"],
+};
+const PILOT_LINES = [
+  "Wait… why can't I see anything?",
+  'Just tell me when to turn. A little earlier this time?',
+  'Flying blindfolded. What could possibly go wrong?',
+  'Ready! I think. Which way is up again?',
+  "Seatbelt on, snacks ready. Let's go!",
+  "Okay, I trust you. Mostly.",
+];
+function hashStr(t) { let h = 7; for (const ch of String(t)) h = (h * 31 + ch.charCodeAt(0)) >>> 0; return h; }
+
+function introOpts(level, role) {
+  const m = MAPS.find((x) => x.id === level.id) || {};
+  const T = THEMES[m.theme] || THEMES.forest;
+  const WX = WEATHER[m.weather] || WEATHER.calm;
+  const me = (Account.signedIn && Account.profile.display_name) || myName(), friend = app.friendName || 'Friend';
+  const names = app.mode === 'npc' ? { pilot: me, navigator: 'Navigator' }
+    : app.mode === 'solo' ? { pilot: me, navigator: 'Co-pilot' }
+      : app.mode === 'navai' ? { pilot: 'AI pilot', navigator: me }
+        : role === 'pilot' ? { pilot: me, navigator: friend } : { pilot: friend, navigator: me };
+  const h = hashStr(level.id);
+  const navPool = NAV_LINES[m.theme] || NAV_LINES.forest;
+  const world = m.n <= 2 ? 'Training' : T.name;
+  const titleHtml = `<div class="ct-kicker">${icon(m.n <= 2 ? 'target' : T.icon)}<span>${esc(world)} · Map ${m.n || ''}</span></div>`
+    + `<h2 class="ct-name">${esc(m.name || level.name)}</h2>`
+    + `<div class="ct-meta">${pips(m.tier || 1)}<b>${esc(m.difficulty || '')}</b><span class="dot"></span>${icon(WX.icon)}<b>${esc(WX.name)}</b></div>`;
+  return {
+    titleHtml,
+    names,
+    lines: [[names.navigator, navPool[h % navPool.length]], [names.pilot, PILOT_LINES[(h >> 3) % PILOT_LINES.length]]],
+  };
+}
+
+// Spelar cutscenen i en 3D-vy; HUD och knappar göms under tiden. onEnd körs när den är klar eller hoppas över.
+function playIntro(view, root, level, role, onEnd) {
+  document.body.classList.add('cine-on');
+  view.playIntro(root, {
+    ...introOpts(level, role),
+    onEnd: () => {
+      document.body.classList.remove('cine-on');
+      if (app.inGame && onEnd) onEnd();
+    },
+  });
+}
+
 async function requestWakeLock() {
   try { if (navigator.wakeLock) app.wakeLock = await navigator.wakeLock.request('screen'); } catch (_) {}
 }
@@ -789,7 +844,20 @@ async function startGame() {
     const g = {
       role, level,
       msgEl: $('.center-msg', pilotUI),
-      begin: () => { pv.begin(); $('.wait-msg', pilotUI).classList.add('hidden'); },
+      begin: () => {
+        $('.wait-msg', pilotUI).classList.add('hidden');
+        if (g.introPlaying) return;                 // navigatören skickar "go" igen medan cutscenen spelas
+        if (!g.introDone) {
+          g.introPlaying = true;
+          playIntro(pv.view, pilotUI, level, 'pilot', () => {
+            g.introPlaying = false; g.introDone = true;
+            pv.begin();
+            if (npc) npcSay("Here we go! I'll call every turn.");
+          });
+          return;
+        }
+        pv.begin();
+      },
       gesture: (k) => {
         pv.gesture(k);
         const icon = GESTURE_ICON[k];
@@ -892,7 +960,6 @@ async function startGame() {
     }
     pv.start();
     if (isSolo()) g.begin(); else showWait();
-    if (npc) setSub("Hi! I can see the course for you. Listen to me and we'll fly through the gates.");
   } else {
     // Navigatören sitter med i planet (helskärm 3D utan dimma) och har en liten minikarta.
     const [{ RadarView }, { NavCockpit }] = await Promise.all([import('./radar.js'), import('./nav3d.js')]);
@@ -963,8 +1030,13 @@ async function startGame() {
         if (a === 'go') {
           unlockAudio();
           startPill.classList.add('hidden');
-          g.goSentAt = performance.now();
-          toPeer({ t: 'go' });
+          const sendGo = () => { g.goSentAt = performance.now(); toPeer({ t: 'go' }); };
+          if (!g.introDone) {
+            g.introDone = true;
+            // med en vän startar båda cutscenen samtidigt; med AI-piloten startar flygningen när cutscenen är klar
+            if (aiMode) playIntro(view.view, navUI, level, 'navigator', sendGo);
+            else { sendGo(); playIntro(view.view, navUI, level, 'navigator', null); }
+          } else sendGo();
         }
       };
     });
@@ -1129,6 +1201,7 @@ function showResults(e) {
 function endGame() {
   const g = app.game;
   app.inGame = false;
+  document.body.classList.remove('cine-on');
   if (g) {
     try { g.view && g.view.destroy(); } catch (e) { console.warn(e); }
     try { g.minimap && g.minimap.destroy(); } catch (e) { console.warn(e); }

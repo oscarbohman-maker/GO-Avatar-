@@ -3,6 +3,21 @@
 import * as THREE from './lib/three.module.min.js';
 import { PlaneRig } from './rig.js';
 import { makeEnvMap } from './envmap.js';
+import { EffectComposer } from './lib/post/EffectComposer.js';
+import { RenderPass } from './lib/post/RenderPass.js';
+import { UnrealBloomPass } from './lib/post/UnrealBloomPass.js';
+import { OutputPass } from './lib/post/OutputPass.js';
+
+// bakgrund som liknar shopens scen (mörkblå med ljusare mitt) – behövs för glöden
+function stageBackground() {
+  const c = document.createElement('canvas'); c.width = 512; c.height = 320;
+  const g = c.getContext('2d');
+  const gr = g.createRadialGradient(256, 70, 10, 256, 110, 380);
+  gr.addColorStop(0, '#2c5596'); gr.addColorStop(0.55, '#14295a'); gr.addColorStop(1, '#0a1634');
+  g.fillStyle = gr; g.fillRect(0, 0, 512, 320);
+  const t = new THREE.CanvasTexture(c); t.colorSpace = THREE.SRGBColorSpace;
+  return t;
+}
 
 const STILL = { x: 0, y: 0, z: 0, yaw: 0, pitch: 0, roll: 0, speed: 0, phase: 'waiting' };
 
@@ -36,6 +51,16 @@ export class SkinPreview {
     this.thumbRig.root.visible = false;
     scene.add(this.thumbRig.root);
     this.camera = new THREE.PerspectiveCamera(32, 1, 0.5, 300);
+    // glöd runt det som lyser
+    this.bg = stageBackground();
+    try {
+      const rt = new THREE.WebGLRenderTarget(16, 16, { type: THREE.HalfFloatType, samples: 4 });
+      this.composer = new EffectComposer(this.renderer, rt);
+      this.composer.addPass(new RenderPass(scene, this.camera));
+      this.bloom = new UnrealBloomPass(new THREE.Vector2(16, 16), 0.65, 0.45, 1.1);
+      this.composer.addPass(this.bloom);
+      this.composer.addPass(new OutputPass());
+    } catch (e) { console.warn('bloom', e); this.composer = null; }
     this.angle = 0.7;
     this.running = false;
     this._resize = () => this.resize();
@@ -61,6 +86,16 @@ export class SkinPreview {
     this.renderer.setSize(w, h, false);
     this.camera.aspect = w / h;
     this.camera.updateProjectionMatrix();
+    if (this.composer) { this.composer.setSize(w, h); this.bloom.resolution.set(w, h); }
+  }
+
+  _render() {
+    if (this.composer) {
+      this.scene.background = this.bg;
+      try { this.composer.render(); return; } catch (e) { console.warn('bloom', e); this.composer = null; }
+    }
+    this.scene.background = null;
+    this.renderer.render(this.scene, this.camera);
   }
 
   start() {
@@ -75,7 +110,7 @@ export class SkinPreview {
       this.angle += dt * 0.3;
       this.rig.update(dt, { x: 0, y: Math.sin(now / 900) * 0.25, z: 0, yaw: 0, pitch: 0, roll: Math.sin(now / 1300) * 0.08, speed: 25, phase: 'fly' }, {});
       this._place(this.angle);
-      this.renderer.render(this.scene, this.camera);
+      this._render();
     };
     this._raf = requestAnimationFrame(loop);
   }
@@ -86,13 +121,14 @@ export class SkinPreview {
   thumbnail(id, w = 240, h = 150) {
     const size = new THREE.Vector2(); this.renderer.getSize(size);
     const pr = this.renderer.getPixelRatio();
-    this.renderer.setPixelRatio(1);
+    this.renderer.setPixelRatio(2);                  // dubbel upplösning: skarpa kort även på Retina-skärmar
     this.renderer.setSize(w, h, false);
     this.camera.aspect = w / h; this.camera.updateProjectionMatrix();
     this.thumbRig.setSkin(id);
     this.thumbRig.update(0.016, STILL, {});
     this.rig.root.visible = false; this.rig.skin.group.visible = false; this.thumbRig.root.visible = true;
     this._place(0.75, 31);
+    this.scene.background = null;                    // kortbilderna har genomskinlig bakgrund
     this.renderer.render(this.scene, this.camera);
     const url = this.canvas.toDataURL('image/png');
     this.rig.root.visible = true; this.rig.skin.group.visible = true; this.thumbRig.root.visible = false;
@@ -107,6 +143,7 @@ export class SkinPreview {
     window.removeEventListener('resize', this._resize);
     this.rig.dispose();
     this.thumbRig.dispose();
+    if (this.composer) this.composer.dispose();
     this.renderer.dispose();
   }
 }
