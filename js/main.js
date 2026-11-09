@@ -9,6 +9,9 @@ import { NpcNavigator, NpcVoice } from './npc.js';
 import { icon, applyIcons, setIconLabel } from './icons.js';
 import { POINTS } from './sim.js';
 import { THEMES, WEATHER } from './themes.js';
+import { Account } from './account.js';
+import { SKINS, RARITY, skinById } from './skins.js';
+import { levelInfo, maxScoreOf, rankOf } from './progress.js';
 
 const $ = (s, r = document) => r.querySelector(s);
 const $$ = (s, r = document) => Array.from(r.querySelectorAll(s));
@@ -55,6 +58,7 @@ let current = 'screen-home';
 function show(id) {
   current = id;
   closeGameMenu();
+  if (id !== 'screen-shop' && shopPreview) shopPreview.stop();
   $$('.screen').forEach((s) => s.classList.toggle('active', s.id === id));
   const sc = $('#' + id);
   if (sc && sc.classList.contains('menu-screen')) sc.scrollTop = 0;
@@ -381,7 +385,7 @@ function wireNet(net) {
     if (net.relay) {
       app._relayNote = 'Connected through the relay – in-game voice chat is not available, call each other instead.';
     } else { app._relayNote = ''; setupVoice(); }
-    if (!app.isHost) net.send({ t: 'hello', name: myName(), ver: PROTOCOL_VERSION });
+    if (!app.isHost) net.send({ t: 'hello', name: myName(), ver: PROTOCOL_VERSION, skin: mySkin() });
   });
 }
 
@@ -468,13 +472,15 @@ function onMessage(m) {
     case 'hello':
       if (!app.isHost) return;
       app.friendName = String(m.name || 'Friend').slice(0, 16);
+      app.friendSkin = skinById(m.skin).id;
       if (m.ver !== PROTOCOL_VERSION) setStatus($('#lobby-status'), 'Warning: your friend has a different version of the game. Reload the page.', 'error');
       else setStatus($('#lobby-status'), app.friendName + ' joined!' + (app._relayNote ? ' ' + app._relayNote : ''), 'ok');
-      app.net.send({ t: 'welcome', name: myName(), hostRole: app.hostRole, level: app.levelId, ver: PROTOCOL_VERSION });
+      app.net.send({ t: 'welcome', name: myName(), hostRole: app.hostRole, level: app.levelId, ver: PROTOCOL_VERSION, skin: mySkin() });
       renderLobby();
       break;
     case 'welcome':
       app.friendName = String(m.name || 'Friend').slice(0, 16);
+      app.friendSkin = skinById(m.skin).id;
       app.hostRole = m.hostRole === 'navigator' ? 'navigator' : 'pilot';
       app.levelId = LEVEL_INFO[m.level] ? m.level : 'test';
       $('#lobby-code').textContent = app.net.code;
@@ -850,6 +856,7 @@ async function startGame() {
       if (gesture) g.gesture(gesture);
     };
     const pv = new PilotView(pilotUI, level, {
+      skin: planeSkin(),
       invertY: P.invertY,
       sensitivity: P.sensitivity,
       onEvent: (e) => {
@@ -891,6 +898,7 @@ async function startGame() {
     const [{ RadarView }, { NavCockpit }] = await Promise.all([import('./radar.js'), import('./nav3d.js')]);
     if (!app.inGame) return;
     const view = new NavCockpit($('.view3d-holder', navUI), level);
+    view.view.rig.setSkin(planeSkin());
     view.start();
     const mini = new RadarView($('.nav-mini', navUI), level, { compact: true, mode: 'heading', zoomIdx: 1 });
     mini.start();
@@ -1035,14 +1043,11 @@ function countUp(el, to, ms = 900, delay = 0, prefix = '') {
 
 // Betyg utifrån hur stor del av maxpoängen man tog
 function rating(level, score) {
-  // max: alla ringar perfekt med full combo, alla stjärnor och halva möjliga tidsbonusen
-  let gateMax = 0;
-  for (let c = 1; c <= level.gates.length; c++) gateMax += Math.round(POINTS.perfect * multOf(c));
-  const max = gateMax + (level.stars ? level.stars.length : 0) * POINTS.star + (level.par || 60) * POINTS.timeBonusPerSec * 0.5;
+  // max: alla ringar perfekt med full combo, alla stjärnor och halva möjliga tidsbonusen (samma som databasen)
+  const max = maxScoreOf(level);
   const r = score / max;
-  const letter = r >= 0.85 ? 'S' : r >= 0.7 ? 'A' : r >= 0.55 ? 'B' : r >= 0.4 ? 'C' : 'D';
   const stars = r >= 0.85 ? 3 : r >= 0.65 ? 2 : r >= 0.4 ? 1 : 0;
-  return { letter, stars };
+  return { letter: rankOf(score, max), stars };
 }
 
 // Konfetti vid nytt rekord (enkla DOM-bitar med CSS-animation)
@@ -1113,6 +1118,8 @@ function showResults(e) {
   if (partner) chips.push(`<span class="chip">${icon('users')} with ${esc(partner)}</span>`);
   $('.res-chips', res).innerHTML = chips.join('');
 
+  showXp(L, e, score);
+
   res.classList.remove('hidden');
   const panel = $('.panel', res);
   panel.classList.remove('play'); void panel.offsetWidth; panel.classList.add('play');
@@ -1160,6 +1167,308 @@ function closeGameMenu() {
   $('#btn-gmenu').setAttribute('aria-expanded', 'false');
 }
 
+// ---------------------------------------------------------------- konto, level och shop
+// Level och shop finns bara för inloggade. Utloggade ser en låst förhandsvisning.
+let shopPreview = null;
+let shopSel = null;
+let buyConfirm = null;
+const thumbCache = {};
+
+function mySkin() { return Account.signedIn ? Account.skin() : 'classic'; }
+
+// Planets skin: pilotens val. I solo och med NPC/AI är det ditt plan.
+function planeSkin() {
+  if (app.mode !== 'online') return mySkin();
+  return myRole() === 'pilot' ? mySkin() : (app.friendSkin || 'classic');
+}
+
+// Rund level-ring (SVG) med siffran i mitten
+function lvlRing(level, progress) {
+  const C = 2 * Math.PI * 20;
+  const p = Math.max(0, Math.min(1, progress || 0));
+  return `<svg viewBox="0 0 48 48" class="ring"><circle cx="24" cy="24" r="20" class="ring-bg"/>`
+    + `<circle cx="24" cy="24" r="20" class="ring-fg" stroke-dasharray="${C.toFixed(2)}" stroke-dashoffset="${(C * (1 - p)).toFixed(2)}"/></svg>`
+    + `<span class="ring-num">${level}</span>`;
+}
+
+function rarityChip(s) {
+  const R = RARITY[s.rarity] || RARITY.common;
+  return `<span class="rar" style="--rc:${R.color}">${R.name}</span>`;
+}
+
+function renderAcctBar() {
+  const bar = $('#acct-bar'), shopBtn = $('#btn-shop');
+  const avail = Account.available;
+  bar.classList.toggle('hidden', !avail);
+  shopBtn.classList.toggle('hidden', !avail);
+  $('.lock-badge', shopBtn).classList.toggle('hidden', Account.signedIn);
+  if (!avail) return;
+  if (Account.status === 'loading') { bar.innerHTML = '<div class="acct-chip skeleton" aria-busy="true"></div>'; return; }
+  if (!Account.signedIn) {
+    bar.innerHTML = `<button class="acct-chip guest" type="button" data-sfx>${icon('user')}<span><b>Log in</b><small>Earn XP, level up and unlock skins</small></span>${icon('right')}</button>`;
+  } else {
+    const p = Account.profile, li = Account.level;
+    bar.innerHTML = `<button class="acct-chip" type="button" data-sfx aria-label="Your account: level ${li.level}">`
+      + `<span class="lvl-ring">${lvlRing(li.level, li.progress)}</span>`
+      + `<span class="ac-mid"><b>${esc(p.display_name)}</b><span class="xp-bar sm"><i style="width:${(li.progress * 100).toFixed(1)}%"></i></span>`
+      + `<small>${li.max ? 'Max level' : `${li.into} / ${li.need} XP`}</small></span>`
+      + `<span class="coin-pill">${icon('coin')}<b>${p.coins.toLocaleString('en-US')}</b></span></button>`;
+  }
+  $('.acct-chip', bar).onclick = () => openAccount();
+}
+
+function openAccount() {
+  renderAccount();
+  show('screen-account');
+}
+
+function renderAccount() {
+  const signed = Account.signedIn;
+  $('.acct-login').classList.toggle('hidden', signed);
+  $('.acct-profile').classList.toggle('hidden', !signed);
+  if (!signed) {
+    const st = $('#acct-status');
+    if (!Account.available) setStatus(st, 'Accounts are not set up yet.', 'error');
+    else if (Account.status === 'error' && Account.error) setStatus(st, Account.error, 'error');
+    return;
+  }
+  const p = Account.profile, li = Account.level;
+  $('.acct-profile .lvl-ring').innerHTML = lvlRing(li.level, li.progress);
+  $('.acct-name').textContent = p.display_name;
+  $('.acct-email').textContent = (Account.user && Account.user.email) || '';
+  $('.xp-level').textContent = li.max ? `Level ${li.level} · Max` : `Level ${li.level}`;
+  $('.xp-nums').textContent = li.max ? '' : `${li.into.toLocaleString('en-US')} / ${li.need.toLocaleString('en-US')} XP · ${li.left.toLocaleString('en-US')} to level ${li.level + 1}`;
+  $('.acct-profile .xp-bar i').style.width = (li.progress * 100).toFixed(1) + '%';
+  const maps = MAPS.filter((m) => m.available).length;
+  const tile = (ic, v, label) => `<div class="ms-stat">${icon(ic)}<b>${v}</b><small>${label}</small></div>`;
+  $('.acct-stats').innerHTML = tile('zap', p.xp.toLocaleString('en-US'), 'Total XP')
+    + tile('coin', p.coins.toLocaleString('en-US'), 'Coins')
+    + tile('target', `${Account.clearsCount()}/${maps}`, 'Maps cleared')
+    + tile('bag', `${p.owned_skins.length}/${SKINS.length}`, 'Skins');
+  // nästa skins man kan låsa upp
+  const next = SKINS.filter((s) => !Account.owns(s.id)).sort((a, b) => a.level - b.level || a.price - b.price).slice(0, 3);
+  $('.acct-next').innerHTML = next.length ? next.map((s) => {
+    const ok = li.level >= s.level;
+    return `<div class="next-row"><span class="nr-dot" style="--rc:${(RARITY[s.rarity] || RARITY.common).color}"></span>`
+      + `<span class="nr-name"><b>${esc(s.name)}</b>${rarityChip(s)}</span>`
+      + `<span class="nr-req ${ok ? 'ok' : ''}">${ok ? (s.price ? `${icon('coin')}${s.price}` : 'Free') : `${icon('lock')}Level ${s.level}`}</span></div>`;
+  }).join('') : '<p class="hint">You own every skin. Legend!</p>';
+}
+
+// ---- shop
+async function openShop() {
+  show('screen-shop');
+  if (!shopPreview) {
+    try {
+      const { SkinPreview } = await import('./shopview.js');
+      shopPreview = new SkinPreview($('.shop-canvas'));
+    } catch (e) { console.warn(e); }
+  }
+  if (!shopSel) shopSel = mySkin();
+  renderShop();
+  if (shopPreview && current === 'screen-shop') { shopPreview.setSkin(shopSel); shopPreview.start(); }
+}
+
+function skinState(s) {
+  if (!Account.signedIn) return 'guest';
+  const li = Account.level;
+  if (Account.skin() === s.id) return 'equipped';
+  if (Account.owns(s.id)) return 'owned';
+  if (li.level < s.level) return 'locked';
+  if (Account.profile.coins < s.price) return 'poor';
+  return 'buy';
+}
+
+function renderShop() {
+  const signed = Account.signedIn;
+  $('.shop-guest').classList.toggle('hidden', signed);
+  $('.shop-wallet').innerHTML = signed
+    ? `<span class="wallet-lvl">${icon('zap')}Level <b>${Account.level.level}</b></span><span class="coin-pill">${icon('coin')}<b>${Account.profile.coins.toLocaleString('en-US')}</b></span>`
+    : '';
+  const grid = $('.shop-grid');
+  grid.innerHTML = '';
+  SKINS.forEach((s, i) => {
+    const st = skinState(s);
+    const R = RARITY[s.rarity] || RARITY.common;
+    const el = document.createElement('button');
+    el.type = 'button';
+    el.className = `skin-card st-${st}` + (s.id === shopSel ? ' sel' : '');
+    el.setAttribute('role', 'listitem');
+    el.style.setProperty('--rc', R.color);
+    el.style.animationDelay = (i * 0.025) + 's';
+    const tag = st === 'equipped' ? `<span class="sc-tag eq">${icon('check')}Equipped</span>`
+      : st === 'owned' ? '<span class="sc-tag own">Owned</span>'
+        : st === 'locked' || st === 'guest' ? `<span class="sc-tag lock">${icon('lock')}Lvl ${s.level}</span>`
+          : `<span class="sc-tag price">${s.price ? icon('coin') + s.price : 'Free'}</span>`;
+    el.innerHTML = `<span class="sc-img"><img alt="" decoding="async"></span><span class="sc-body"><b>${esc(s.name)}</b><span class="sc-meta">${rarityChip(s)}${tag}</span></span>`;
+    const img = $('img', el);
+    if (thumbCache[s.id]) img.src = thumbCache[s.id];
+    el.onclick = () => { sfx.click(); shopSel = s.id; buyConfirm = null; if (shopPreview) shopPreview.setSkin(s.id); renderShop(); };
+    grid.appendChild(el);
+  });
+  renderShopInfo();
+  // små bilder av skinsen, en i taget så att sidan inte hackar
+  if (shopPreview) {
+    const todo = SKINS.filter((s) => !thumbCache[s.id]);
+    const step = () => {
+      const s = todo.shift();
+      if (!s || current !== 'screen-shop') return;
+      thumbCache[s.id] = shopPreview.thumbnail(s.id);
+      const card = $$('.skin-card')[SKINS.indexOf(s)];
+      if (card) $('img', card).src = thumbCache[s.id];
+      setTimeout(step, 30);
+    };
+    if (todo.length) setTimeout(step, 60);
+  }
+}
+
+function renderShopInfo() {
+  const s = skinById(shopSel);
+  const st = skinState(s);
+  const R = RARITY[s.rarity] || RARITY.common;
+  const info = $('.shop-info');
+  info.style.setProperty('--rc', R.color);
+  $('.shop-rarity').innerHTML = rarityChip(s);
+  $('.shop-name').textContent = s.name;
+  $('.shop-desc').textContent = s.desc;
+  const li = Account.level;
+  const reqLvl = `<span class="req ${li && li.level >= s.level ? 'ok' : ''}">${icon(li && li.level >= s.level ? 'check' : 'lock')}Level ${s.level}</span>`;
+  const reqPrice = `<span class="req ${Account.signedIn && Account.profile.coins >= s.price ? 'ok' : ''}">${icon('coin')}${s.price ? s.price.toLocaleString('en-US') + ' coins' : 'Free'}</span>`;
+  $('.shop-req').innerHTML = reqLvl + reqPrice;
+  const btn = $('#btn-shop-action');
+  btn.disabled = false;
+  btn.className = 'btn primary big';
+  const set = (ic, text) => { btn.innerHTML = (ic ? icon(ic) : '') + `<span>${text}</span>`; };
+  if (st === 'guest') { set('user', 'Log in to unlock'); btn.onclick = () => openAccount(); }
+  else if (st === 'equipped') { set('check', 'Equipped'); btn.disabled = true; }
+  else if (st === 'owned') { set('plane', 'Equip'); btn.onclick = () => shopDo(() => Account.equip(s.id), `${s.name} equipped!`); }
+  else if (st === 'locked') { set('lock', `Reach level ${s.level}`); btn.disabled = true; }
+  else if (st === 'poor') { set('coin', `${(s.price - Account.profile.coins).toLocaleString('en-US')} more coins needed`); btn.disabled = true; }
+  else if (buyConfirm === s.id) {
+    btn.classList.add('confirm');
+    set('coin', s.price ? `Confirm: buy for ${s.price.toLocaleString('en-US')}` : 'Confirm: claim');
+    btn.onclick = () => { buyConfirm = null; shopDo(async () => { await Account.buy(s.id); await Account.equip(s.id); }, `${s.name} unlocked and equipped!`, true); };
+  } else {
+    set('coin', s.price ? `Buy for ${s.price.toLocaleString('en-US')}` : 'Claim for free');
+    btn.onclick = () => { buyConfirm = s.id; renderShopInfo(); setTimeout(() => { if (buyConfirm === s.id) { buyConfirm = null; if (current === 'screen-shop') renderShopInfo(); } }, 3500); };
+  }
+}
+
+async function shopDo(fn, okText, celebrate) {
+  const btn = $('#btn-shop-action'), st = $('#shop-status');
+  btn.disabled = true;
+  setStatus(st, 'Saving…');
+  try {
+    await fn();
+    setStatus(st, okText, 'ok');
+    if (celebrate) { sfx.combo(); $('.shop-stage').classList.remove('cheer'); void $('.shop-stage').offsetWidth; $('.shop-stage').classList.add('cheer'); }
+  } catch (e) {
+    setStatus(st, e.message, 'error');
+  }
+  renderShop();
+}
+
+// ---- resultat: XP och mynt
+function animateNumber(el, from, to, ms, fmtFn = (v) => v) {
+  const t0 = performance.now();
+  const step = (now) => {
+    const k = Math.min(1, (now - t0) / ms);
+    el.textContent = fmtFn(Math.round(from + (to - from) * (1 - Math.pow(1 - k, 3))));
+    if (k < 1) requestAnimationFrame(step);
+  };
+  requestAnimationFrame(step);
+}
+
+async function showXp(L, e, score) {
+  const box = $('.res-xp'), guest = $('.res-guest');
+  box.classList.add('hidden'); guest.classList.add('hidden');
+  if (!Account.available) return;
+  if (!Account.signedIn) { guest.classList.remove('hidden'); return; }
+  const before = Account.profile ? Account.profile.xp : 0;
+  const li0 = levelInfo(before);
+  box.classList.remove('hidden');
+  $('.lvl-ring', box).innerHTML = lvlRing(li0.level, li0.progress);
+  $('.rx-xp', box).textContent = '+0 XP';
+  $('.rx-coins', box).innerHTML = '';
+  $('.xp-bar i', box).style.width = (li0.progress * 100) + '%';
+  $('.rx-note', box).textContent = 'Saving your flight…';
+  $('.rx-levelup', box).classList.add('hidden');
+  $('.rx-parts', box).innerHTML = '';
+  const token = (box._token = {});
+  let r;
+  try {
+    r = await Account.award({ map: L.id, score, stars: e.stars || 0, coop: app.mode === 'online', maxScore: maxScoreOf(L) });
+  } catch (err) {
+    if (box._token === token) $('.rx-note', box).textContent = err.message;
+    return;
+  }
+  if (box._token !== token) return;
+  const li1 = levelInfo(before + r.xp);
+  animateNumber($('.rx-xp', box), 0, r.xp, 1100, (v) => `+${v.toLocaleString('en-US')} XP`);
+  $('.rx-coins', box).innerHTML = `${icon('coin')}+${r.coins.toLocaleString('en-US')}`;
+  const names = { run: r.repeat_pct < 100 ? `Map cleared · ${r.repeat_pct}% replay` : 'Map cleared', first: 'First clear', rank: `New best rank ${r.rank}`, coop: 'Co-op bonus' };
+  $('.rx-parts', box).innerHTML = Object.entries(r.parts || {}).filter(([, v]) => v > 0)
+    .map(([k, v]) => `<span class="chip">${esc(names[k] || k)} <b>+${v}</b></span>`).join('');
+  $('.rx-note', box).textContent = li1.max ? 'Max level reached!' : `${li1.left.toLocaleString('en-US')} XP to level ${li1.level + 1}`;
+  const bar = $('.xp-bar i', box);
+  if (li1.level > li0.level) {
+    bar.style.width = '100%';
+    setTimeout(() => {
+      $('.lvl-ring', box).innerHTML = lvlRing(li1.level, li1.progress);
+      bar.style.transition = 'none'; bar.style.width = '0%'; void bar.offsetWidth; bar.style.transition = '';
+      bar.style.width = (li1.progress * 100) + '%';
+      const fresh = (r.new_skins || []).map((id) => skinById(id).name);
+      const inShop = SKINS.filter((s) => s.price > 0 && s.level > li0.level && s.level <= li1.level).map((s) => s.name);
+      const lu = $('.rx-levelup', box);
+      lu.innerHTML = `<b>${icon('zap')}Level up! You are now level ${li1.level}</b>`
+        + (fresh.length ? `<span>New skin: ${esc(fresh.join(', '))}</span>` : '')
+        + (inShop.length ? `<span>Now in the shop: ${esc(inShop.join(', '))}</span>` : '');
+      lu.classList.remove('hidden');
+      sfx.combo();
+    }, 900);
+  } else {
+    setTimeout(() => { bar.style.width = (li1.progress * 100) + '%'; $('.lvl-ring', box).innerHTML = lvlRing(li1.level, li1.progress); }, 300);
+  }
+}
+
+function initAccount() {
+  $('#btn-shop').onclick = () => openShop();
+  $('#btn-acct-shop').onclick = () => openShop();
+  $('#btn-shop-login').onclick = () => openAccount();
+  $('#btn-res-login').onclick = () => { backToLobby(true); openAccount(); };
+  const emailIn = $('#acct-email');
+  const send = async () => {
+    const btn = $('#btn-acct-send'), st = $('#acct-status');
+    btn.disabled = true;
+    setStatus(st, 'Sending…');
+    try {
+      const r = await Account.signIn(emailIn.value);
+      if (r.sent) setStatus(st, `Check your inbox (${emailIn.value.trim()}) and open the link on this device.`, 'ok');
+      else setStatus(st, '');
+    } catch (e) { setStatus(st, e.message, 'error'); }
+    btn.disabled = false;
+  };
+  $('#btn-acct-send').onclick = send;
+  emailIn.addEventListener('keydown', (e) => { if (e.key === 'Enter') send(); });
+  $('#btn-acct-logout').onclick = async () => { await Account.signOut(); renderAccount(); };
+  const editBox = $('.acct-name-edit'), nameIn = $('#acct-name-input');
+  $('#btn-acct-edit').onclick = () => { editBox.classList.toggle('hidden'); nameIn.value = Account.profile ? Account.profile.display_name : ''; nameIn.focus(); };
+  const saveName = async () => {
+    try { await Account.setName(nameIn.value); editBox.classList.add('hidden'); setStatus($('#acct-status2'), 'Name saved.', 'ok'); }
+    catch (e) { setStatus($('#acct-status2'), e.message, 'error'); }
+  };
+  $('#btn-acct-name-save').onclick = saveName;
+  nameIn.addEventListener('keydown', (e) => { if (e.key === 'Enter') saveName(); });
+
+  Account.on(() => {
+    renderAcctBar();
+    if (current === 'screen-account') renderAccount();
+    if (current === 'screen-shop') renderShop();
+  });
+  renderAcctBar();
+  Account.init(Store.profile.name);
+}
+
 function initGameMenu() {
   // meny-knappen (kompakt läge): öppnar en liten lista med röst, omstart och avsluta
   const gm = $('.game-menu'), toggle = $('#btn-gmenu');
@@ -1184,7 +1493,8 @@ initMenus();
 initSettings();
 initLobby();
 initGameMenu();
+initAccount();
 applyTouchSetting();
 
 // För automatiska tester
-window.__blindflyg = { app, startSolo, rewardPopup, updateCombo };
+window.__blindflyg = { app, startSolo, rewardPopup, updateCombo, showResults, Account };

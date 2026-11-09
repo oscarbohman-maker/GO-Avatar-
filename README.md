@@ -54,6 +54,39 @@ Kartorna är seedade, så båda spelarna får exakt samma bana. Varje karta har 
 
 **Styrning för piloten:** W/S eller ↑/↓ för upp/ner, A/D eller ←/→ för att banka och svänga, Mellanslag för gas, Shift för broms och Q/E för att titta runt. På mobil finns en styrspak till vänster och knappar till höger, och man drar på högra delen av skärmen för att titta runt.
 
+## Konto, level och shop
+
+Level och shop finns bara för den som har loggat in. Inloggningen sker med en länk som skickas till ens e-post, så det behövs inget lösenord. Den som inte har loggat in ser kontoraden och shopen med ett lås, och spelet fungerar annars som vanligt.
+
+**XP och mynt** delas ut när man klarar en bana:
+
+| Del | XP |
+| --- | --- |
+| Klarad bana | 60 / 90 / 130 / 180 / 250 efter svårighet (1–5 pluppar), plus poäng ÷ 50 och 5 per stjärna |
+| Första gången | +150 % av grundbelöningen |
+| Nytt bättre betyg | B +20, A +50, S +100 (bara skillnaden mot tidigare bästa) |
+| Omspel | 1:a gången 100 %, sedan 60 %, 40 %, 30 % och 25 % |
+| Co-op | +10 % för båda spelarna, om båda är inloggade |
+
+Man får mynt motsvarande halva XP:n. XP minskar aldrig, men mynt används i shopen.
+
+**Level:** för att gå från level L till L+1 krävs 100 + 40·(L−1) XP, alltså 100, 140, 180 och så vidare. Högsta level är 50 (51 940 XP). En bra första runda på alla banor ger ungefär 12 500 XP (level 24) och 6 300 mynt.
+
+**Shop:** varje skin har ett level-krav och ett pris. Man måste nå leveln och sedan köpa skinet, och köpet bekräftas med ett andra tryck. Några skins är gratis och läggs till automatiskt när man når deras level (5, 12 och 40). Det valda skinet syns på planet för båda spelarna när du flyger, och i co-op visas pilotens skin.
+
+**Säkerhet:** databasen räknar själv ut XP och mynt och kontrollerar köp. Spelaren kan bara läsa sin egen profil. Orimliga poäng och för täta resultat (under 20 sekunder isär) avvisas.
+
+### Sätta upp Supabase (en gång)
+
+1. Skapa ett gratis projekt på [supabase.com](https://supabase.com), till exempel med regionen *Stockholm (eu-north-1)*.
+2. Öppna **SQL Editor → New query**, klistra in hela `supabase/schema.sql` och tryck **Run**.
+3. Under **Authentication → URL Configuration** sätter du *Site URL* och lägger till samma adress under *Redirect URLs*, alltså spelets adress (t.ex. `https://oscarbohman-maker.github.io/GO-Avatar-/`).
+4. Under **Project Settings → API** kopierar du *Project URL* och den publika nyckeln (*anon* / *publishable*) till `js/config.js`. Båda är publika och får ligga i koden. Använd aldrig *service_role*/*secret*-nyckeln.
+
+Supabases gratisplan skickar bara ett fåtal inloggningsmejl i timmen. Fler kräver egen e-postserver (SMTP) under **Authentication → Emails**.
+
+Skinens format för designers finns i [docs/SKINS.md](docs/SKINS.md). Om man ändrar banor eller skins kör man `node tools/gen-sql.mjs` och sedan den nya `supabase/schema.sql` i Supabase. Spelarnas data behålls.
+
 ## Fysik
 
 - Planet svänger genom att banka (koordinerad sväng). Högre fart ger större svängradie, så det lönar sig att bromsa före skarpa svängar.
@@ -103,8 +136,15 @@ js/input.js       Tangentbord och pekskärm
 js/storage.js     Profil, inställningar och rekord
 js/sfx.js         Ljudeffekter
 tests/            Automatiska test
+js/progress.js    Level, XP, mynt och betyg (samma regler som databasen)
+js/skins.js       Planets skins (färger per del, pris, level-krav)
+js/account.js     Konto via Supabase: inloggning, profil, belöningar, köp
+js/config.js      Supabase-adress och publik nyckel
+js/shopview.js    Shopens roterande 3D-plan och skinbilder
+supabase/         Databasen: tabeller, regler och funktioner (schema.sql)
+docs/SKINS.md     Skinformatet för designers
 img/maps/         Kartornas miniatyrbilder
-tools/            Verktyg för att rendera miniatyrbilderna
+tools/            Rendera miniatyrbilder, skapa schema.sql
 ```
 
 ### Test
@@ -119,3 +159,14 @@ Testerna kontrollerar bland annat följande:
 - **Navigatörsläget:** en navigatör kan styra AI-piloten genom kanjonen med bara ←/→.
 - **Regler och poäng:** krasch ger omstart, och ringar ger poäng (mest för Perfect).
 - **Modellerna och figurerna:** de har alla namngivna delar, och händerna sitter kvar på ratten.
+- **Level och shop:** level-kurvan, belöningar, omspel, ekonomin och skin-katalogen fungerar, och `supabase/schema.sql` är i takt med spelet.
+
+Databasen testas mot en lokal Postgres, med en förenklad kopia av Supabases inloggning:
+
+```bash
+PD_PG="-h localhost -p 5432 -U postgres" npm run test:db
+```
+
+Testet kontrollerar att databasen räknar exakt som spelet, att spelaren inte kan ändra XP, mynt eller skins själv, att man bara ser sin egen profil, och att fuskskyddet, köp, level-krav och gratis skins fungerar.
+
+**Låtsaskonto för utveckling:** på `localhost` med `?devAccount=1` används ett konto som bara sparas i webbläsaren. Det följer samma regler men använder ingen server, så menyerna går att testa utan Supabase. Med `?devAccount=0` stängs det av.

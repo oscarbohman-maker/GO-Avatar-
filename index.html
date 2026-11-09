@@ -17,6 +17,7 @@
   <!-- ===== HOME ===== -->
   <section id="screen-home" class="screen menu-screen active">
     <div class="menu-wrap">
+      <div id="acct-bar" class="acct-bar hidden"></div>
       <div class="brand">
         <div class="brand-plane" aria-hidden="true" data-icon="plane"></div>
         <h1 class="logo">PLAIN <span>DODGE!</span></h1>
@@ -25,10 +26,95 @@
       <div class="menu-buttons">
         <button id="btn-freeplay" class="btn primary huge" data-sfx data-icon="play">Free Play</button>
         <button id="btn-friends" class="btn secondary huge" data-sfx data-icon="users">Play with Friends</button>
-        <button id="btn-settings" class="btn secondary" data-sfx data-icon="settings">Settings</button>
+        <div class="menu-row">
+          <button id="btn-shop" class="btn secondary hidden" data-sfx data-icon="bag">Shop<span class="lock-badge hidden" aria-label="Log in to unlock"></span></button>
+          <button id="btn-settings" class="btn secondary" data-sfx data-icon="settings">Settings</button>
+        </div>
       </div>
       <p id="home-status" class="status" role="status"></p>
       <div id="records" class="records"></div>
+    </div>
+  </section>
+
+  <!-- ===== KONTO ===== -->
+  <section id="screen-account" class="screen menu-screen">
+    <div class="menu-wrap">
+      <header class="screen-head">
+        <button class="btn icon back" data-back="screen-home" aria-label="Back" data-icon="back"></button>
+        <h2>Pilot account</h2>
+      </header>
+      <!-- utloggad -->
+      <div class="card acct-login">
+        <div class="acct-hero">
+          <div class="acct-hero-ico" data-icon="award"></div>
+          <div><h3 class="acct-hero-title">Save your progress</h3><p>Log in to earn XP and coins, level up and unlock new plane skins in the shop.</p></div>
+        </div>
+        <ul class="perks">
+          <li data-icon="zap"><span><b>XP and levels</b> for every map you clear</span></li>
+          <li data-icon="coin"><span><b>Coins</b> to spend on plane skins</span></li>
+          <li data-icon="users"><span><b>Co-op bonus</b> when you fly with a friend</span></li>
+        </ul>
+        <label class="field"><span>Email</span><input id="acct-email" type="email" autocomplete="email" inputmode="email" placeholder="you@example.com"></label>
+        <button id="btn-acct-send" class="btn primary big" data-sfx data-icon="mail">Send login link</button>
+        <p id="acct-status" class="status" role="status"></p>
+        <p class="hint">No password needed. We email you a link; open it on this device to log in.</p>
+      </div>
+      <!-- inloggad -->
+      <div class="card acct-profile hidden">
+        <div class="acct-head">
+          <div class="lvl-ring big" aria-hidden="true"></div>
+          <div class="acct-id">
+            <div class="acct-name-row"><b class="acct-name"></b><button id="btn-acct-edit" class="btn ghost small icon-only" aria-label="Change name" data-icon="edit"></button></div>
+            <small class="acct-email"></small>
+          </div>
+        </div>
+        <div class="acct-name-edit hidden">
+          <input id="acct-name-input" maxlength="16" autocomplete="nickname" aria-label="Pilot name">
+          <button id="btn-acct-name-save" class="btn primary small" data-sfx>Save</button>
+        </div>
+        <div class="xp-block">
+          <div class="xp-row"><span class="xp-level"></span><span class="xp-nums"></span></div>
+          <div class="xp-bar"><i></i></div>
+        </div>
+        <div class="acct-stats"></div>
+        <h3>Next rewards</h3>
+        <div class="acct-next"></div>
+        <div class="acct-actions">
+          <button id="btn-acct-shop" class="btn secondary" data-sfx data-icon="bag">Open shop</button>
+          <button id="btn-acct-logout" class="btn ghost" data-sfx data-icon="logout">Log out</button>
+        </div>
+        <p id="acct-status2" class="status" role="status"></p>
+      </div>
+    </div>
+  </section>
+
+  <!-- ===== SHOP ===== -->
+  <section id="screen-shop" class="screen menu-screen">
+    <div class="menu-wrap wide">
+      <header class="screen-head">
+        <button class="btn icon back" data-back="screen-home" aria-label="Back" data-icon="back"></button>
+        <div class="head-title"><h2>Hangar shop</h2><span class="head-sub">Plane skins</span></div>
+        <div class="shop-wallet"></div>
+      </header>
+      <div class="shop-guest hidden">
+        <span data-icon="lock"></span>
+        <p><b>Log in to unlock skins.</b> Earn coins and XP by clearing maps, then spend them here.</p>
+        <button id="btn-shop-login" class="btn primary small" data-sfx>Log in</button>
+      </div>
+      <div class="shop-main">
+        <div class="shop-stage">
+          <canvas class="shop-canvas" aria-label="Plane preview"></canvas>
+          <div class="shop-info">
+            <span class="shop-rarity"></span>
+            <h3 class="shop-name"></h3>
+            <p class="shop-desc"></p>
+            <div class="shop-req"></div>
+            <button id="btn-shop-action" class="btn primary big" data-sfx></button>
+            <p id="shop-status" class="status" role="status"></p>
+          </div>
+        </div>
+        <div class="shop-grid" role="list"></div>
+      </div>
     </div>
   </section>
 
@@ -265,6 +351,14 @@
           <div class="best-bar"><div class="best-fill"></div><div class="best-mark"></div></div>
           <div class="best-text"></div>
         </div>
+        <div class="res-xp hidden" aria-live="polite">
+          <div class="rx-head"><div class="lvl-ring" aria-hidden="true"></div>
+            <div class="rx-main"><div class="rx-gain"><b class="rx-xp">+0 XP</b><span class="rx-coins"></span></div>
+              <div class="xp-bar"><i></i></div><small class="rx-note">Saving…</small></div></div>
+          <div class="rx-levelup hidden"></div>
+          <div class="rx-parts"></div>
+        </div>
+        <div class="res-guest hidden"><span data-icon="award"></span><span>Log in to earn <b>XP</b> and <b>coins</b> for your flights.</span><button id="btn-res-login" class="btn small primary" data-sfx>Log in</button></div>
         <ul class="res-breakdown"></ul>
         <div class="res-chips"></div>
         <div class="res-actions">

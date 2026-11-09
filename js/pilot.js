@@ -12,6 +12,7 @@ export class PilotView {
     this.session = new FlightSession(level, (e) => this.onEvent(e));
     this.input = new Input(container, { invertY: opts.invertY, sensitivity: opts.sensitivity });
     this.view = new View3D(container.querySelector('.view3d-holder'), level, { seat: 'pilot' });
+    if (opts.skin) this.view.rig.setSkin(opts.skin);   // planets skin (pilotens val)
     this.acc = 0;
     this.running = false;
   }

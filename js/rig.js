@@ -3,6 +3,7 @@
 import * as THREE from './lib/three.module.min.js';
 import { buildPlane, buildCockpit } from './models.js';
 import { Avatar, AVATAR_STYLES } from './avatar.js';
+import { skinById, partOf, partStyle, DEFAULT_SKIN } from './skins.js';
 
 const V = (x = 0, y = 0, z = 0) => new THREE.Vector3(x, y, z);
 // Var cockpiten sitter i förhållande till planets tyngdpunkt (nosen är 6 m fram)
@@ -50,9 +51,36 @@ export class PlaneRig {
     this.idle = { t: 0, yaw: 0, pitch: -0.2, next: 2 };
     this.view = 'cockpit';
     this.time = 0;
+    this.setSkin(DEFAULT_SKIN);
   }
 
   _get(n) { return this.cockpit.getObjectByName(n); }
+
+  // Skin: färgar planets yttre delar (kropp, vingar, stjärt, motorer, detaljer, propellrar).
+  // Varje del får ett eget material så att skinet inte påverkar cockpiten eller andra plan.
+  setSkin(id) {
+    const skin = skinById(id || DEFAULT_SKIN);
+    if (this.skinId === skin.id) return;
+    this.skinId = skin.id;
+    if (this._skinMats) Object.values(this._skinMats).forEach((m) => m.dispose());
+    const mats = {};
+    const matFor = (part) => {
+      if (mats[part]) return mats[part];
+      const st = partStyle(skin, part);
+      const m = new THREE.MeshStandardMaterial({
+        name: 'skin_' + part, color: new THREE.Color(st.c), roughness: st.r ?? 0.5, metalness: st.m ?? 0,
+        emissive: new THREE.Color(st.e || 0x000000), emissiveIntensity: st.e ? (st.ei ?? 1) : 0,
+      });
+      if (part === 'body') m.side = THREE.DoubleSide;     // kroppen är ett öppet skal
+      return (mats[part] = m);
+    };
+    this.exterior.traverse((o) => {
+      if (!o.isMesh) return;
+      const part = partOf(o.name);
+      if (part) o.material = matFor(part);
+    });
+    this._skinMats = mats;
+  }
 
   // Krasch: den del som träffade lossnar som skrot. Vid hård träff (sev >= 0.8) slås hela planet sönder.
   // Skrotet är kopior av modellens delar (delar geometri och material) som läggs i kraschens effekter.

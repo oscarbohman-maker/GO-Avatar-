@@ -1,1 +1,1 @@
-{"type":"module","private":true,"scripts":{"test":"node tests/sim.test.mjs && node tests/rig.test.mjs"}}
+{"type":"module","private":true,"scripts":{"test":"node tests/sim.test.mjs && node tests/rig.test.mjs && node tests/progress.test.mjs","test:db":"node tests/db.test.mjs","gen:sql":"node tools/gen-sql.mjs"}}
