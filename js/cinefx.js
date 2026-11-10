@@ -102,10 +102,10 @@ export class IntroFX {
     for (let i = 0; i < 9; i++) {
       const b = new THREE.Group();
       const l = new THREE.Mesh(wing, mat), r = new THREE.Mesh(wing, mat); r.scale.x = -1;
-      b.add(l, r); b.scale.setScalar(1.3);
+      b.add(l, r); b.scale.setScalar(2.6);
       this.group.add(b);
       const row = Math.ceil(i / 2), side = i === 0 ? 0 : i % 2 ? 1 : -1;
-      this.birds.push({ b, l, r, off: V(side * row * 2.6 - 9, 4 + row * 0.6 + Math.random(), -10 + row * 2.2 + R(-0.5, 0.5)), ph: R(0, 6) });
+      this.birds.push({ b, l, r, off: V(13 + side * row * 3.2, 4.5 + row * 0.5 + Math.random() * 0.6, 16 - row * 3.4 + R(-0.4, 0.4)), ph: R(0, 6) });
     }
   }
 
@@ -173,8 +173,8 @@ export class IntroFX {
         if (t < r.t0) continue;
         if (!r.started) {
           r.started = true;
-          r.p = ahead(38 + Math.random() * 20, r.side * R(9, 17), 55);
-          r.v = V(R(-2, 2), -6, R(-2, 2)).addScaledVector(this.right, -r.side * 3);
+          r.p = ahead(R(72, 95), r.side * R(8, 15), R(30, 40));
+          r.v = V(R(-2, 2), -8, R(-2, 2)).addScaledVector(this.right, -r.side * 2);
           r.w = V(R(-3, 3), R(-3, 3), R(-3, 3));
           r.m.visible = true; r.m.scale.setScalar(r.size);
         }
@@ -246,7 +246,7 @@ export class IntroFX {
       this.birds.forEach((q) => {
         const leave = clamp01((t - 2.4) / 1.5);
         const o = q.off;
-        const pos = P.clone().addScaledVector(this.right, o.x - leave * 14).addScaledVector(this.fwd, o.z + leave * 6).add(V(0, o.y + leave * 10, 0));
+        const pos = P.clone().addScaledVector(this.right, o.x + leave * 16).addScaledVector(this.fwd, o.z + leave * 8).add(V(0, o.y + leave * 14, 0));
         q.b.position.copy(pos);
         q.b.rotation.set(0, Math.atan2(-this.fwd.x, -this.fwd.z) + Math.PI / 2, 0);
         const a = Math.sin(t * 11 + q.ph) * 0.6;

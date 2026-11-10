@@ -202,6 +202,7 @@ export class View3D {
     if (Math.abs(cam.fov - fov) > 0.01) { cam.fov = fov; cam.updateProjectionMatrix(); }
     // skakande kamera (mindre inne i kabinen)
     const sh = ifx ? ifx.shake * (dash ? 0.25 : 1) : 0;
+    if (this._bloom) this._bloom.threshold = dash ? 2.4 : 1.2;
     if (sh > 0) cam.position.add(V((Math.random() - 0.5) * sh, (Math.random() - 0.5) * sh, (Math.random() - 0.5) * sh));
     this._render(!this._noBloom);
   }
@@ -317,6 +318,7 @@ export class View3D {
     const fov = 60 + (95 - 60) * b;   // hög FOV i cockpiten
     if (Math.abs(cam.fov - fov) > 0.01) { cam.fov = fov; cam.updateProjectionMatrix(); }
     rig.setView(b > 0.88 ? 'cockpit' : 'outside');
+    if (this._bloom) this._bloom.threshold = b > 0.5 ? 2.4 : 1.2;   // i cockpit glöder bara de starkaste ljusen
     this._render(this.bloomInGame && !this._noBloom);
   }
 
