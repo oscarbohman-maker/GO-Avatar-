@@ -52,11 +52,34 @@ Kartorna är seedade, så båda spelarna får exakt samma bana. Varje karta har 
 
 **På mobil och små skärmar** blir spelvyn kompakt, så att man ser så mycket som möjligt av banan. Tid, port, poäng och stjärnor visas i en smal rad med ikoner, och fart och höjd i en liten rad längst ned. Röst, omstart och avsluta ligger bakom ⋯-knappen. Styrspaken och BOOST/BRAKE är mindre och genomskinliga. Navigatörens order visas på en rad längst ned och bleknar bort. Belöningar och combo visas som små, korta popups högt upp, så att de inte skymmer vägen.
 
-**Cutscene vid starten:** varje gång man startar en bana spelas en kort filmisk intro på cirka 7 sekunder, med svarta filmremsor upptill och nedtill och en Skip-knapp. Det finns två kameravinklar:
-1. En kamera följer planet snett bakifrån medan det flyger in mot banan och vinkar med vingarna, och kartans namn, värld, svårighet och väder visas.
-2. En dashcam från instrumentbrädan visar besättningen, som säger varsin rolig replik (navigatören kommenterar världen) medan navigatören pekar framåt.
+**Cutscene vid starten:** varje gång man startar en bana spelas en kort filmisk intro på cirka 8 sekunder, med svarta filmremsor upptill och nedtill och en Skip-knapp. Varje värld har sin egen händelse som planet flyger igenom:
+
+| Värld | Händelse |
+| --- | --- |
+| Träning | Planet gör en barrel roll |
+| Skog | En fågelflock flyger i formation bredvid planet |
+| Öken | En sandstorm sluter sig runt planet |
+| Djungel | Blixtnedslag och åska i monsunen |
+| Röda klippor | Stenblock rasar ner bredvid planet, med dammoln och skakningar |
+| Arktis | En snöstorm blir till en vit vägg som planet flyger in i |
+| Lava | Ett vulkanutbrott med glödande lavabomber, rött sken och skakningar |
+
+Det finns två kameravinklar:
+1. En kamera följer planet snett bakifrån medan händelsen pågår och kartans namn, värld, svårighet och väder visas.
+2. En dashcam från instrumentbrädan visar besättningen. Navigatören och piloten säger varsin filmisk replik om just den världen, till exempel *"Whiteout ahead. The only way through is that pass — and it is closing fast."* – *"Then we don't slow down. Hold on!"*
 
 Sedan klipper bilden tillbaka till följekameran, som mjukt glider bakom planet och in i cockpit under nedräkningen. Planet flyger hela tiden in mot startlinjen och når den precis på GO. Med en vän spelar båda cutscenen samtidigt. Efter en krasch, eller med Restart, börjar man om utan cutscene, men planet flyger fortfarande in under nedräkningen.
+
+**Utan hack:** när banan laddas förbereds allt som annars kompileras eller laddas upp första gången det syns, till exempel cockpit, skinet, glöden, krascheffekterna och cutscenens händelse. Därför hackar det inte i cutscenen eller vid en krasch.
+
+**Interiören följer skinet:** säten, paneler, väggar, knappar, lampor och skärmar får skinets färger, och mitt på instrumentbrädan sitter skinets märke. Spakar och rattar beror på sällsyntheten:
+
+| Sällsynthet | Spakarnas knoppar | Rattar |
+| --- | --- | --- |
+| Common | Vanliga, i skinets färger | Vanliga |
+| Epic | Räfflad krom | Krom |
+| Legendary | Glödande kristaller | Guld |
+| Ultra | Lysande klot med ring | Neonlister |
 
 **Styrning för piloten:** W/S eller ↑/↓ för upp/ner, A/D eller ←/→ för att banka och svänga, Mellanslag för gas, Shift för broms och Q/E för att titta runt. På mobil finns en styrspak till vänster och knappar till höger, och man drar på högra delen av skärmen för att titta runt.
 
@@ -147,6 +170,7 @@ js/skins.js       Skin-katalogen (namn, sällsynthet, pris, level-krav)
 js/skinpack.js    Skinens utseende och effekter (från Claude Design)
 js/envmap.js      Omgivningsljus för reflexer på planet
 js/cutscene.js    Intro-cutscenen vid starten av varje bana
+js/cinefx.js      Cutscenens händelse per värld (snöstorm, utbrott, stenras …)
 js/lib/post/      Glöd (bloom) från three.js r170 (MIT)
 js/account.js     Konto via Supabase: inloggning, profil, belöningar, köp
 js/config.js      Supabase-adress och publik nyckel

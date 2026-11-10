@@ -12,6 +12,7 @@ import { UnrealBloomPass } from './lib/post/UnrealBloomPass.js';
 import { OutputPass } from './lib/post/OutputPass.js';
 import { Cutscene, approachPose, followCam, INTRO_LEN, COUNTDOWN_LEN } from './cutscene.js';
 import { skinById } from './skins.js';
+import { IntroFX } from './cinefx.js';
 
 const TOUCH = typeof matchMedia === 'function' && matchMedia('(pointer: coarse)').matches;
 
@@ -97,9 +98,60 @@ export class View3D {
     this.renderer.render(this.world.scene, this.camera);
   }
 
+  // Förbered allt som annars kompileras eller laddas upp första gången det syns (cockpit, skin,
+  // glöd, krascheffekter, cutscenens händelse), så att det inte hackar mitt i spelet.
+  warmUp() {
+    const r = this.renderer, scene = this.world.scene, rig = this.rig, fx = this.fx;
+    if (!this.introFx) this.introFx = new IntroFX(this.world, this.level);
+    const vis = { cockpit: rig.cockpit.visible, ext: rig.exteriorWrap.visible };
+    rig.cockpit.visible = true; rig.exteriorWrap.visible = true; rig.showCrew(true);
+    const tmp = [fx._mesh(true), fx._mesh(false), new THREE.Mesh(fx.cube, fx.concrete)];
+    tmp.forEach((m) => { m.visible = true; m.position.set(this.level.start.x, -50, this.level.start.z); fx.root.add(m); });
+    const scorch = fx.scorch.visible; fx.scorch.visible = true;
+    const undo = rig.skin.prewarm();
+    this.introFx.showAllForWarmup(true);
+    // Antalet ljuskällor ändras när cockpiten (med sin kabinlampa) visas eller göms, och då behövs andra
+    // varianter av alla program. Därför kompileras båda lägena, för skärmen och för glödens bildbuffert.
+    const compileBoth = (target) => {
+      const prev = r.getRenderTarget();
+      r.setRenderTarget(target);
+      r.compile(scene, this.camera);                       // med cockpit (kabinlampa tänd)
+      rig.cockpit.visible = false;
+      r.compile(scene, this.camera);                       // utan cockpit (följekamera, utifrån)
+      rig.cockpit.visible = true;
+      r.setRenderTarget(prev);
+    };
+    try {
+      compileBoth(null);
+      // texturer laddas upp nu, inte när de syns första gången
+      const seen = new Set();
+      scene.traverse((o) => {
+        const ms = o.material ? (Array.isArray(o.material) ? o.material : [o.material]) : [];
+        ms.forEach((m) => ['map', 'emissiveMap', 'envMap', 'alphaMap'].forEach((k) => { const t = m[k]; if (t && t.isTexture && !seen.has(t)) { seen.add(t); r.initTexture(t); } }));
+      });
+      // glöden (cutscenen använder den alltid): allt kompileras också för glödens bildbuffert
+      // (andra varianter av programmen än för skärmen), och en bild ritas så att glödens egna program kompileras
+      if (!this._noBloom) {
+        const c = this._composerFor();
+        compileBoth(c.readBuffer);
+        c.render();
+        rig.cockpit.visible = false; c.render(); rig.cockpit.visible = true;
+      }
+    } catch (e) { console.warn('warmUp', e); }
+    this.introFx.showAllForWarmup(false);
+    undo();
+    fx.scorch.visible = scorch;
+    tmp.slice(0, 2).forEach((m) => { fx.root.remove(m); (m.userData.lit ? fx.pool.lit : fx.pool.flat).push(m); });
+    fx.root.remove(tmp[2]);
+    rig.cockpit.visible = vis.cockpit; rig.exteriorWrap.visible = vis.ext; rig.showCrew(false);
+    this.warm = true;
+  }
+
   // Cutscene vid början av banan. opts: se Cutscene. Slutar av sig själv, med Skip, eller när nedräkningen börjar.
   playIntro(root, opts) {
     if (this.cine) this.cine.destroy();
+    if (!this.warm) this.warmUp();
+    this.introFx.start();
     this.cine = new Cutscene(this, root, { ...opts, level: this.level });
   }
 
@@ -114,6 +166,10 @@ export class View3D {
     followCam(p, 1, this.chasePos, look);
     this.blend = 0;
     if (c) c.destroy();
+    // världens dimma och ljus tillbaka som vanligt
+    if (this.introFx) { this.introFx.dispose(); this.introFx = null; }
+    this.world._fogK = -1;
+    this.world.hemi.intensity = this.world.hemiBase;
   }
 
   _cineFrame(dt, st) {
@@ -122,15 +178,31 @@ export class View3D {
     const dash = cine.inDashcam();
     rig.setView(dash ? 'cockpit' : 'outside');
     rig.showCrew(dash);
+    const ifx = this.introFx;
+    if (ifx) s2.roll += ifx.roll(cine.t);
     rig.update(dt, s2, dash ? cine.crewLooks() : {});
     this.world.updateGates(0);
     this.world.animate(dt, cam.position, st.ft);
     this.fx.update(dt);
     this.world.setFogMix(0);
+    // världens händelse (snöstorm, stenras, utbrott …): dimma, blixtljus, skakningar och åska
+    if (ifx) {
+      ifx.update(dt, s2, cam.position, dash);
+      const f = this.world.scene.fog;
+      if (ifx.fog) { f.color.setHex(ifx.fog.color); f.near = ifx.fog.near; f.far = ifx.fog.far; }
+      else { f.color.copy(this.world.fogA.color); f.near = this.world.fogA.near; f.far = this.world.fogA.far; }
+      if (ifx.flash > 0) f.color.lerp(this._flashCol || (this._flashCol = new THREE.Color(0xfff2e0)), ifx.flash * 0.35);
+      this.world.scene.background.copy(f.color);
+      this.world.hemi.intensity = this.world.hemiBase + ifx.flash * 2.6;
+      for (let n = ifx.takeThunder(); n > 0; n--) sfx.thunder();
+    }
     const far = this.world.scene.fog.far + 25;
     if (Math.abs(cam.far - far) > 2) { cam.far = far; cam.updateProjectionMatrix(); }
     const fov = cine.camera(rig, s2, cam.position, cam.quaternion);
     if (Math.abs(cam.fov - fov) > 0.01) { cam.fov = fov; cam.updateProjectionMatrix(); }
+    // skakande kamera (mindre inne i kabinen)
+    const sh = ifx ? ifx.shake * (dash ? 0.25 : 1) : 0;
+    if (sh > 0) cam.position.add(V((Math.random() - 0.5) * sh, (Math.random() - 0.5) * sh, (Math.random() - 0.5) * sh));
     this._render(!this._noBloom);
   }
 
@@ -250,6 +322,7 @@ export class View3D {
 
   destroy() {
     if (this.cine) { this.cine.destroy(); this.cine = null; }
+    if (this.introFx) { this.introFx.dispose(); this.introFx = null; }
     if (this._composer) { this._composer.dispose(); this._composer = null; }
     window.removeEventListener('resize', this._resize);
     this.fx.dispose();

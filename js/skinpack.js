@@ -275,7 +275,7 @@ export function createSkinSystem(opts = {}) {
     }
     const mat = s.material;
     mat.map = o.tex || glowTex; mat.blending = o.add === false ? THREE.NormalBlending : ADD; mat.opacity = 0;
-    mat.rotation = o.spin ? R(0, TAU) : 0; mat.needsUpdate = true;
+    mat.rotation = o.spin ? R(0, TAU) : 0;
     s.visible = true; s.position.copy(o.pos); s.scale.setScalar(o.size);
     const p = { s, v: o.vel ? o.vel.clone() : V(), age: 0, life: o.life, size: o.size, grow: o.grow || 0, grav: o.grav || 0, drag: o.drag || 0,
       c0: new THREE.Color(o.c0), c1: new THREE.Color(o.c1 ?? o.c0), op: o.op ?? 1, spin: o.spin || 0 };
@@ -1207,6 +1207,18 @@ export function createSkinSystem(opts = {}) {
     clear: () => { clearP(); },
     rarity: () => (cur ? cur.skin.rarity : null),
     setBudget(max, rate) { maxP = max; rateMul = rate; while (P.length > maxP) killP(0); },
+    // Förbered: skapa alla partiklar nu och visa en av varje sort en stund (så att de kan kompileras).
+    // Returnerar en funktion som döljer dem igen.
+    prewarm() {
+      while (free.length + P.length < maxP) {
+        const sp = new THREE.Sprite(new THREE.SpriteMaterial({ map: glowTex, transparent: true, depthWrite: false }));
+        sp.frustumCulled = false; sp.visible = false; vfx.add(sp); free.push(sp);
+      }
+      const shown = free.slice(-2);
+      shown.forEach((sp, i) => { sp.visible = true; sp.material.map = i ? starTex : glowTex; sp.material.blending = i ? ADD : THREE.NormalBlending; sp.position.set(0, -60, 0); });
+      ribbons.forEach((r) => { r.mesh.visible = true; });
+      return () => { shown.forEach((sp) => { sp.visible = false; }); };
+    },
     dispose() { cur = null; clearP(); clearRibbons(); free.forEach((sp) => { sp.material.dispose(); vfx.remove(sp); }); free.length = 0; },
   };
 }

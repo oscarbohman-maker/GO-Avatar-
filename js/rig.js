@@ -87,6 +87,7 @@ export class PlaneRig {
     this.exterior.children.forEach((c) => { if (!c.userData.base) c.userData.skinExtra = true; });
     this.props = ['propeller_h', 'propeller_v'].map((n) => this.exterior.getObjectByName(n));
     this._applyEnv();
+    this.applyInterior(id);
     // Legendary och Ultra får fler partiklar
     const high = ['legendary', 'ultra'].includes(this.skin.rarity());
     this.skin.setBudget(high ? this.budget.highMax : this.budget.max, high ? this.budget.highRate : this.budget.rate);
@@ -98,6 +99,140 @@ export class PlaneRig {
   }
 
   _markBase() { this.exterior.children.forEach((c) => { c.userData.base = true; }); }
+
+  // ---- Interiören i skinets stil ---------------------------------------------------------
+  // Färger på säten, paneler, väggar, knappar, lampor och skärmar efter skinets färger, och
+  // spakar och rattar efter sällsynthet. Figurerna rörs inte. Standardplanet får originalet.
+  _cockpitMeshes() {
+    if (this._cpMeshes) return this._cpMeshes;
+    const skip = new Set();
+    [this.pilot.group, this.copilot.group].forEach((g) => g.traverse((o) => skip.add(o)));
+    const list = [];
+    this.cockpit.traverse((o) => { if (o.isMesh && !skip.has(o)) list.push(o); });
+    this._cpMeshes = list;
+    // originalen sparas så att standardplanet kan få tillbaka dem
+    this._orig = new Map();
+    list.forEach((o) => {
+      const m = o.material;
+      if (!m || this._orig.has(m)) return;
+      this._orig.set(m, { color: m.color ? m.color.clone() : null, emissive: m.emissive ? m.emissive.clone() : null, ei: m.emissiveIntensity, metal: m.metalness, rough: m.roughness });
+    });
+    list.forEach((o) => { o.userData.origMat = o.material; o.userData.origGeo = o.geometry; });
+    return list;
+  }
+
+  applyInterior(id) {
+    const meta = skinById(id);
+    const list = this._cockpitMeshes();
+    // återställ allt först
+    this._orig.forEach((v, m) => {
+      if (v.color) m.color.copy(v.color);
+      if (v.emissive) m.emissive.copy(v.emissive);
+      m.emissiveIntensity = v.ei; m.metalness = v.metal; m.roughness = v.rough;
+    });
+    list.forEach((o) => { o.material = o.userData.origMat; o.geometry = o.userData.origGeo; });
+    if (this._ownMats) { this._ownMats.forEach((m) => m.dispose()); }
+    this._ownMats = [];
+    if (this._interiorExtras) { this._interiorExtras.forEach((o) => { if (o.parent) o.parent.remove(o); if (o.geometry) o.geometry.dispose(); }); }
+    if (this._ownTex) { this._ownTex.dispose(); this._ownTex = null; }
+    this._interiorExtras = [];
+    if (meta.id === DEFAULT_SKIN) return;
+
+    // färger ur skinets färgprov: den mest färgstarka blir accent
+    const C = (h, s2, l) => new THREE.Color().setHSL(((h % 1) + 1) % 1, Math.max(0, Math.min(1, s2)), Math.max(0, Math.min(1, l)));
+    const cols = meta.swatch.map((x) => new THREE.Color(x));
+    const hsl = cols.map((c) => c.getHSL({}));
+    const vivid = (i) => hsl[i].s * (1 - Math.abs(hsl[i].l - 0.5) * 1.4);
+    const order = cols.map((_, i) => i).sort((a, b) => vivid(b) - vivid(a));
+    const A = hsl[order[0]], B = hsl[order[1] ?? order[0]];
+    const avgL = hsl.reduce((a, h) => a + h.l, 0) / hsl.length;
+    const dark = avgL < 0.32;
+    const rar = meta.rarity;
+    const byName = new Map();
+    this._orig.forEach((v, m) => { if (!byName.has(m.name)) byName.set(m.name, []); byName.get(m.name).push(m); });
+    const set = (name, color, o = {}) => (byName.get(name) || []).forEach((m) => {
+      if (color && m.color) m.color.copy(color);
+      if (o.e && m.emissive) { m.emissive.copy(o.e); m.emissiveIntensity = o.ei ?? m.emissiveIntensity; }
+      if (o.m != null) m.metalness = o.m;
+      if (o.r != null) m.roughness = o.r;
+    });
+    // säten, paneler och väggar
+    set('sadel_lader', C(A.h, A.s * 0.6, dark ? 0.24 : 0.34), { r: 0.75 });
+    set('sadel_mork', C(A.h, A.s * 0.5, dark ? 0.12 : 0.17));
+    set('panel_mork', C(B.h, 0.18, dark ? 0.08 : 0.2));
+    set('panel_ljus', C(A.h, A.s * 0.45, dark ? 0.28 : 0.5), { m: rar === 'common' ? 0 : 0.35, r: 0.4 });
+    set('vit_insida', dark ? C(B.h, 0.18, 0.2) : C(B.h, Math.min(0.35, B.s * 0.4), 0.84));
+    // knappar och lampor i skinets färger
+    const lamp = (i) => { const h = hsl[order[i % order.length]]; return C(h.h, Math.max(0.6, h.s), 0.55); };
+    [['lampa_rod', 0], ['lampa_gron', 1], ['lampa_gul', 2]].forEach(([n, i]) => set(n, lamp(i), { e: lamp(i) }));
+    const glowA = C(A.h, Math.max(0.65, A.s), 0.5);
+    set('radar', C(A.h, 0.6, 0.22), { e: C(A.h, 0.8, 0.3) });
+    set('radar_svep', glowA, { e: glowA });
+    set('skarm', C(A.h, 0.5, 0.2), { e: C(A.h, 0.7, 0.32) });
+
+    // spakar och rattar efter sällsynthet
+    const own = (o) => { const m = new THREE.MeshStandardMaterial(o); this._ownMats.push(m); return m; };
+    const metal = { common: { color: 0xb9bcc1, metalness: 0.35, roughness: 0.3 }, epic: { color: 0xe6ebf0, metalness: 0.95, roughness: 0.12 },
+      legendary: { color: 0xe2b13c, metalness: 0.9, roughness: 0.22 }, ultra: { color: 0x1c2030, metalness: 0.7, roughness: 0.25 } }[rar];
+    const metalM = own({ ...metal, envMap: this.envMap, envMapIntensity: 0.8 });
+    const glowM = own({ color: glowA, emissive: glowA, emissiveIntensity: rar === 'ultra' ? 2.2 : 1.4, roughness: 0.2 });
+    const gripM = own({ color: rar === 'legendary' ? C(A.h, A.s * 0.6, 0.28) : rar === 'ultra' ? 0x101218 : rar === 'epic' ? 0x1b1d22 : C(A.h, A.s * 0.4, 0.14), roughness: rar === 'epic' ? 0.35 : 0.7, metalness: rar === 'epic' ? 0.4 : 0 });
+    const g = (n) => this.cockpit.getObjectByName(n);
+    ['pilot', 'andrepilot'].forEach((n) => {
+      const arc = g(`rattbage_${n}`), bar = g(`rattbalk_${n}`), hub = g(`ratthub_${n}`);
+      if (rar !== 'common') { if (arc) arc.material = metalM; if (bar) bar.material = metalM; }
+      if (rar === 'ultra' && hub) hub.material = glowM;
+      [-1, 1].forEach((sd) => {
+        const grip = g(`rattgrepp_${n}_${sd}`), knob = g(`rattknapp_${n}_${sd}`);
+        if (grip) grip.material = gripM;
+        if (knob) knob.material = glowM;
+        // Ultra: neonlist längs greppen
+        if (rar === 'ultra' && grip) {
+          const strip = new THREE.Mesh(new THREE.BoxGeometry(0.008, 0.15, 0.06), glowM);
+          strip.position.copy(grip.position); strip.rotation.copy(grip.rotation); strip.position.x += sd * 0.028;
+          grip.parent.add(strip); this._interiorExtras.push(strip);
+        }
+      });
+    });
+    // gasreglagens knoppar
+    const knobGeo = {
+      common: null,
+      epic: new THREE.CylinderGeometry(0.026, 0.032, 0.05, 10),
+      legendary: new THREE.OctahedronGeometry(0.04, 0),
+      ultra: new THREE.SphereGeometry(0.03, 18, 12),
+    }[rar];
+    [0, 1, 2].forEach((i) => {
+      const k = g(`gasknopp_${i}`);
+      if (!k) return;
+      if (knobGeo) k.geometry = knobGeo;
+      k.material = rar === 'common' ? own({ color: lamp(i), roughness: 0.4 }) : rar === 'epic' ? metalM : glowM;
+      if (rar === 'ultra') {
+        const ring = new THREE.Mesh(new THREE.TorusGeometry(0.042, 0.005, 6, 28), glowM);
+        ring.rotation.x = Math.PI / 2;
+        k.add(ring); this._interiorExtras.push(ring);
+      }
+    });
+    if (knobGeo) this._interiorExtras.push({ parent: null, geometry: knobGeo });
+    ['gasreglage_0', 'gasreglage_1', 'gasreglage_2', 'trimhjul'].forEach((n) => { const o = g(n); if (o && rar !== 'common') o.material = metalM; });
+
+    // skinets märke mitt på instrumentbrädan (färgprovet i en rund bricka med sällsynthetens ring)
+    const dash = g('instrumentpanel');
+    if (dash && typeof document !== 'undefined') {
+      const c = document.createElement('canvas'); c.width = c.height = 128;
+      const x = c.getContext('2d');
+      const gr = x.createConicGradient ? x.createConicGradient(0, 64, 64) : x.createLinearGradient(0, 0, 128, 128);
+      meta.swatch.concat(meta.swatch[0]).forEach((col, i, arr) => gr.addColorStop(i / (arr.length - 1), col));
+      x.fillStyle = gr; x.beginPath(); x.arc(64, 64, 56, 0, Math.PI * 2); x.fill();
+      x.lineWidth = 10; x.strokeStyle = { common: '#9aa0a8', epic: '#b07cf0', legendary: '#f2b33d', ultra: '#ff4d8d' }[rar]; x.beginPath(); x.arc(64, 64, 58, 0, Math.PI * 2); x.stroke();
+      const tex = new THREE.CanvasTexture(c); tex.colorSpace = THREE.SRGBColorSpace;
+      const badgeM = own({ map: tex, emissive: 0xffffff, emissiveMap: tex, emissiveIntensity: rar === 'common' ? 0.25 : 0.6, roughness: 0.3 });
+      const geo = new THREE.CircleGeometry(0.036, 32);
+      const badge = new THREE.Mesh(geo, badgeM); badge.name = 'skinmarke';
+      badge.position.set(0, 0.212, 0.086);
+      dash.add(badge); this._interiorExtras.push(badge);
+      this._ownTex = tex;
+    }
+  }
 
   // Omgivningsljus (reflexer) för planets material, så att metall och blank lack syns som i designen
   setEnvMap(tex) { this.envMap = tex; this._applyEnv(); }

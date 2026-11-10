@@ -766,23 +766,37 @@ function countdownDisplay(g, snap) {
 
 // ---- cutscene vid början av banan
 // Repliker: navigatören kommenterar världen, piloten svarar. Samma för båda spelarna (väljs efter kartan).
-const NAV_LINES = {
-  canyon: ['Training day! Hit the gates, not the walls.', "I'll be your eyes. Try to listen this time!"],
-  forest: ['I see trees. Lots of trees. You see… nothing. Perfect team!', 'Pine walls on both sides. Stay in the middle!'],
-  desert: ["It's 40 degrees out there. Try not to land in a cactus.", 'Sand, sun and stone walls. What a view! For me.'],
-  jungle: ["If you hear monkeys, that's not me. Probably.", 'Thick jungle ahead. I can see the temple walls!'],
-  redrock: ['Rocks fall from the sky here. Totally normal.', 'Red cliffs everywhere. Keep your wings in!'],
-  arctic: ['Brr! Keep the heater on and the wings off the ice.', "Snow, ice and wind. I'll call every turn!"],
-  lava: ['Fun fact: the floor is lava. Literally.', "It's getting hot in here. Don't touch anything orange!"],
+// Två repliker per värld (navigatören, sedan piloten), som passar världens händelse i cutscenen.
+const SCENE_LINES = {
+  canyon: [
+    ['Training run. Just you, me and a whole lot of rock walls.', 'Rule one: listen to the navigator. Rule two: never touch the walls.'],
+    ["Warm-up lap. Show me what you've got.", "I can't even see the walls… so let's make this look good."],
+  ],
+  forest: [
+    ['Fog is rolling in over the pines. From here on, you fly on my voice.', "Then keep talking. I'm not losing you in there."],
+    ["We've got company — a whole flock flying with us.", "Let's show them how it's done. Lead the way."],
+  ],
+  desert: [
+    ["Sandstorm dead ahead. In ten seconds, neither of us will see a thing.", "Then it's a fair fight. Take me through it."],
+    ['That wall of sand is swallowing the canyon. Stay low, stay with me.', "Low and steady. Let's ride it out."],
+  ],
+  jungle: [
+    ['Lightning over the canopy. Somewhere in that storm is a temple — and our way through.', 'Thunder, rain and ancient ruins. Take us in.'],
+    ['The monsoon is breaking. Every turn I call, you take — no hesitation.', "No hesitation. I'm with you."],
+  ],
+  redrock: [
+    ["The cliffs are coming down! I'll call every rock before it hits.", 'You call it, I dodge it. Nobody gets crushed today.'],
+    ['Rocks are raining down the canyon walls. Stay sharp.', "Sharp, fast and blind. Let's go."],
+  ],
+  arctic: [
+    ['Whiteout ahead. The only way through is that pass — and it is closing fast.', "Then we don't slow down. Hold on!"],
+    ['Blizzard is swallowing the mountains. I have one gap, and we are taking it.', 'Brace yourself. Punching through!'],
+  ],
+  lava: [
+    ['The volcano just woke up. Fire in the sky, lava below — no turning back now.', "Then we fly fast. Tell me where the ground isn't burning."],
+    ['Lava bombs incoming! The only way out is straight through.', 'Straight through the fire. Hang on!'],
+  ],
 };
-const PILOT_LINES = [
-  "Wait… why can't I see anything?",
-  'Just tell me when to turn. A little earlier this time?',
-  'Flying blindfolded. What could possibly go wrong?',
-  'Ready! I think. Which way is up again?',
-  "Seatbelt on, snacks ready. Let's go!",
-  "Okay, I trust you. Mostly.",
-];
 function hashStr(t) { let h = 7; for (const ch of String(t)) h = (h * 31 + ch.charCodeAt(0)) >>> 0; return h; }
 
 function introOpts(level, role) {
@@ -795,7 +809,7 @@ function introOpts(level, role) {
       : app.mode === 'navai' ? { pilot: 'AI pilot', navigator: me }
         : role === 'pilot' ? { pilot: me, navigator: friend } : { pilot: friend, navigator: me };
   const h = hashStr(level.id);
-  const navPool = NAV_LINES[m.theme] || NAV_LINES.forest;
+  const pair = (SCENE_LINES[m.theme] || SCENE_LINES.forest)[h % 2];
   const world = m.n <= 2 ? 'Training' : T.name;
   const titleHtml = `<div class="ct-kicker">${icon(m.n <= 2 ? 'target' : T.icon)}<span>${esc(world)} · Map ${m.n || ''}</span></div>`
     + `<h2 class="ct-name">${esc(m.name || level.name)}</h2>`
@@ -803,7 +817,7 @@ function introOpts(level, role) {
   return {
     titleHtml,
     names,
-    lines: [[names.navigator, navPool[h % navPool.length]], [names.pilot, PILOT_LINES[(h >> 3) % PILOT_LINES.length]]],
+    lines: [[names.navigator, pair[0]], [names.pilot, pair[1]]],
   };
 }
 
@@ -958,6 +972,7 @@ async function startGame() {
     } else {
       $('.minimap', pilotUI).classList.add('hidden');
     }
+    pv.view.warmUp();                               // kompilera allt i förväg: inga hack i cutscenen eller vid krasch
     pv.start();
     if (isSolo()) g.begin(); else showWait();
   } else {
@@ -966,6 +981,7 @@ async function startGame() {
     if (!app.inGame) return;
     const view = new NavCockpit($('.view3d-holder', navUI), level);
     view.view.rig.setSkin(planeSkin());
+    view.view.warmUp();
     view.start();
     const mini = new RadarView($('.nav-mini', navUI), level, { compact: true, mode: 'heading', zoomIdx: 1 });
     mini.start();

@@ -9,7 +9,7 @@
 import * as THREE from './lib/three.module.min.js';
 import { FLIGHT } from './physics.js';
 
-export const INTRO = { shotA: 3.2, shotB: 3.9 };
+export const INTRO = { shotA: 3.2, shotB: 5.2 };
 export const INTRO_LEN = INTRO.shotA + INTRO.shotB;
 export const COUNTDOWN_LEN = 3;
 const V = (x = 0, y = 0, z = 0) => new THREE.Vector3(x, y, z);
@@ -104,7 +104,7 @@ export class Cutscene {
     this.el.classList.toggle('shot-b', this.inDashcam());
     // repliker under dashcam-tagningen
     const lines = this.opts.lines || [];
-    const idx = tb < 0.25 ? -1 : tb < 1.95 ? 0 : 1;
+    const idx = tb < 0.25 ? -1 : tb < 2.75 ? 0 : 1;
     if (idx !== this.shownLine) {
       this.shownLine = idx;
       if (idx >= 0 && lines[idx]) {
@@ -114,7 +114,7 @@ export class Cutscene {
       } else this.sub.classList.remove('show');
     }
     // navigatören pekar framåt: "kör!"
-    if (!this.gestured && tb > 2.2) { this.gestured = true; rig.gesture('up'); }
+    if (!this.gestured && tb > 3.1) { this.gestured = true; rig.gesture('up'); }
     if (this.t >= INTRO_LEN) this.finish();
   }
 

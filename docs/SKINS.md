@@ -45,6 +45,16 @@ These are the same fields as in the design package:
 - **Legendary and Ultra:** they get soft, continuous light trails from the wingtips (and the tail on Ultra) in the skin's own colors, about 35–50 % more particles, slightly bigger effects, and their own burst when the plane flies through a ring.
 - **Glow (bloom):** anything that really glows gets a halo. It is on in the shop, in the intro cutscene and in the game on computers, and off in the game on phones to save power.
 
+### Interior
+
+The cockpit follows the skin (`applyInterior` in `js/rig.js`):
+
+- **Colors:** seats, panels, walls, buttons, lamps and screens take the skin's colors. The most vivid swatch color is the accent, and dark skins get a dark cabin.
+- **Badge:** a round badge with the skin's colors sits in the middle of the dashboard, with a ring in the rarity's color.
+- **Throttle knobs:** Common has the standard knobs in the skin's colors, Epic has knurled chrome, Legendary has glowing crystals, and Ultra has glowing orbs with a ring.
+- **Yokes:** Epic has chrome, Legendary has gold with leather grips in the accent color, and Ultra has dark grips with neon strips and a glowing hub.
+- **Standard plane:** keeps the original cockpit.
+
 ## Adding or changing a skin
 
 1. Add its looks in `js/skinpack.js` with `def('rarity', 'id', …)`, or `U('id', …)` for Ultra.
