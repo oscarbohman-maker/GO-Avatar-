@@ -96,13 +96,13 @@ export class Input {
     const k = this.keys;
     const tx = (k.has('ArrowRight') || k.has('KeyD') ? 1 : 0) - (k.has('ArrowLeft') || k.has('KeyA') ? 1 : 0);
     const ty = (k.has('ArrowUp') || k.has('KeyW') ? 1 : 0) - (k.has('ArrowDown') || k.has('KeyS') ? 1 : 0);
-    const rate = Math.min(1, dt * 2.8);   // tangenterna ramper upp mjukt
+    const rate = Math.min(1, dt * 10);    // tangenterna når fullt utslag på ungefär en tiondels sekund
     this.kx += (tx - this.kx) * rate;
     this.ky += (ty - this.ky) * rate;
     let x = this.kx, y = this.ky;
     if (this.stick.active) {
       // liten dödzon och mjukare kurva för finkänslig styrning
-      const curve = (v) => (Math.abs(v) < 0.1 ? 0 : Math.sign(v) * Math.pow((Math.abs(v) - 0.1) / 0.9, 1.8));
+      const curve = (v) => (Math.abs(v) < 0.08 ? 0 : Math.sign(v) * Math.pow((Math.abs(v) - 0.08) / 0.92, 1.3));
       x = curve(this.stick.x); y = curve(this.stick.y);
     }
     if (this.invertY) y = -y;

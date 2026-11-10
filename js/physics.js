@@ -23,12 +23,13 @@ export const FLIGHT = {
   thrustResp: 0.8,   // hur snabbt farten närmar sig gaspådraget
   gAlong: 12,        // gravitationens effekt på farten i stigning/dykning
   maxRoll: 0.75,     // rad (≈ 43°) – lugnare bankning
-  rollK: 12,         // mjukare fjäder för rollen (långsammare, jämnare rörelser)
-  rollC: 7,          // dämpning (≈ kritisk) – ingen översväng
-  turnG: 64,         // ger ca 1.35 rad/s vid full bank och marschfart
+  rollK: 40,         // styv fjäder för rollen: planet bankar direkt när man styr (≈ 0,25 s)
+  rollC: 12.6,       // dämpning (≈ kritisk) – ingen översväng
+  rudder: 0.28,      // rad/s direkt sväng av spaken (nosen börjar vrida sig direkt, innan banken är klar)
+  turnG: 52,         // med rodret blir det ca 1,38 rad/s vid full sväng och marschfart (samma som förut)
   maxYawRate: 1.9,
   pitchRate: 0.35,   // långsam höjdändring – spelet handlar mest om höger/vänster
-  pitchResp: 3,
+  pitchResp: 8,      // upp/ner svarar snabbt
   maxPitch: 0.3,     // nosen kan bara peka lite upp eller ner (≈ 17°)
   autoLevel: 2.2,    // planar ut snabbt av sig själv
   bankSink: 0.6,     // m/s – svängar tappar nästan ingen höjd
@@ -87,7 +88,7 @@ export function stepFlight(s, inp, dt, cfg = FLIGHT) {
   s.rollAcc = rollAcc;
 
   // Sväng som följd av banken (koordinerad sväng)
-  s.yawRate = clamp(cfg.turnG * Math.tan(s.roll) / Math.max(s.speed, 1), -cfg.maxYawRate, cfg.maxYawRate);
+  s.yawRate = clamp(cfg.turnG * Math.tan(s.roll) / Math.max(s.speed, 1) - inp.x * (cfg.rudder || 0), -cfg.maxYawRate, cfg.maxYawRate);
   s.yaw += s.yawRate * dt;
 
   // Tippning med tröghet, planar ut utan input

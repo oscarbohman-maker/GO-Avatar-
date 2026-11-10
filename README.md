@@ -119,7 +119,7 @@ Om man ändrar banor eller skins kör man `node tools/gen-sql.mjs` och sedan den
 ## Fysik
 
 - Planet svänger genom att banka (koordinerad sväng). Högre fart ger större svängradie, så det lönar sig att bromsa före skarpa svängar.
-- Styrningen är lugn och förlåtande, och höjden ändras långsamt. Spelet handlar mest om höger och vänster.
+- Styrningen svarar direkt: planet börjar svänga efter cirka 0,05 s och når halv sväng efter cirka 0,3 s. Det beror på en styv bankning, snabba tangenter och ett litet roder som vrider nosen direkt. Högsta svänghastigheten är densamma som förut, och höjden ändras lugnt. Spelet handlar mest om höger och vänster.
 - Hela planet kan krocka: kroppen, nosen, stjärten och vingspetsarna (13 m vingbredd).
 - Figurernas kroppar hänger i dämpade fjädrar och reagerar på G-krafter. Armar och ben styrs med invers kinematik (IK).
 
