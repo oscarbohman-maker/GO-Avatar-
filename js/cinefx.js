@@ -105,7 +105,7 @@ export class IntroFX {
       b.add(l, r); b.scale.setScalar(2.6);
       this.group.add(b);
       const row = Math.ceil(i / 2), side = i === 0 ? 0 : i % 2 ? 1 : -1;
-      this.birds.push({ b, l, r, off: V(13 + side * row * 3.2, 4.5 + row * 0.5 + Math.random() * 0.6, 16 - row * 3.4 + R(-0.4, 0.4)), ph: R(0, 6) });
+      this.birds.push({ b, l, r, off: V(-4 + side * row * 3.2, 6.5 + row * 0.5 + Math.random() * 0.6, 24 - row * 3.4 + R(-0.4, 0.4)), ph: R(0, 6) });
     }
   }
 
@@ -135,7 +135,7 @@ export class IntroFX {
     this.showAllForWarmup(false);
     this.group.visible = true;
     if (this.stormPts) this.stormPts.visible = true;
-    if (this.birds) this.birds.forEach((b) => { b.b.visible = true; });
+    if (this.birds) this.birds.forEach((b) => { b.b.traverse((o) => { o.visible = true; }); });   // fåglarna och deras vingar
     this.t = 0;
   }
 
@@ -246,7 +246,7 @@ export class IntroFX {
       this.birds.forEach((q) => {
         const leave = clamp01((t - 2.4) / 1.5);
         const o = q.off;
-        const pos = P.clone().addScaledVector(this.right, o.x + leave * 16).addScaledVector(this.fwd, o.z + leave * 8).add(V(0, o.y + leave * 14, 0));
+        const pos = P.clone().addScaledVector(this.right, o.x - leave * 12).addScaledVector(this.fwd, o.z + leave * 10).add(V(0, o.y + leave * 14, 0));
         q.b.position.copy(pos);
         q.b.rotation.set(0, Math.atan2(-this.fwd.x, -this.fwd.z) + Math.PI / 2, 0);
         const a = Math.sin(t * 11 + q.ph) * 0.6;
