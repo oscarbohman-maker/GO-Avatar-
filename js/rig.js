@@ -115,7 +115,7 @@ export class PlaneRig {
     list.forEach((o) => {
       const m = o.material;
       if (!m || this._orig.has(m)) return;
-      this._orig.set(m, { color: m.color ? m.color.clone() : null, emissive: m.emissive ? m.emissive.clone() : null, ei: m.emissiveIntensity, metal: m.metalness, rough: m.roughness });
+      this._orig.set(m, { color: m.color ? m.color.clone() : null, emissive: m.emissive ? m.emissive.clone() : null, ei: m.emissiveIntensity, metal: m.metalness, rough: m.roughness, map: m.map || null, emap: m.emissiveMap || null });
     });
     list.forEach((o) => { o.userData.origMat = o.material; o.userData.origGeo = o.geometry; });
     return list;
@@ -129,7 +129,10 @@ export class PlaneRig {
       if (v.color) m.color.copy(v.color);
       if (v.emissive) m.emissive.copy(v.emissive);
       m.emissiveIntensity = v.ei; m.metalness = v.metal; m.roughness = v.rough;
+      if ((m.map || null) !== v.map || (m.emissiveMap || null) !== v.emap) { m.map = v.map; m.emissiveMap = v.emap; m.needsUpdate = true; }
     });
+    if (this._ownTexs) this._ownTexs.forEach((t) => t.dispose());
+    this._ownTexs = [];
     list.forEach((o) => { o.material = o.userData.origMat; o.geometry = o.userData.origGeo; });
     if (this._ownMats) { this._ownMats.forEach((m) => m.dispose()); }
     this._ownMats = [];
@@ -159,9 +162,9 @@ export class PlaneRig {
     // säten, paneler och väggar
     set('sadel_lader', C(A.h, A.s * 0.6, dark ? 0.24 : 0.34), { r: 0.75 });
     set('sadel_mork', C(A.h, A.s * 0.5, dark ? 0.12 : 0.17));
-    set('panel_mork', C(B.h, 0.18, dark ? 0.08 : 0.2));
+    set('panel_mork', C(A.h, Math.min(0.55, A.s * 0.6), dark ? 0.1 : 0.2));
     set('panel_ljus', C(A.h, A.s * 0.45, dark ? 0.28 : 0.5), { m: rar === 'common' ? 0 : 0.35, r: 0.4 });
-    set('vit_insida', dark ? C(B.h, 0.18, 0.2) : C(B.h, Math.min(0.35, B.s * 0.4), 0.84));
+    set('vit_insida', dark ? C(B.h, 0.22, 0.24) : C(A.h, Math.min(0.5, A.s * 0.6 + 0.1), 0.72));
     // knappar och lampor i skinets färger
     const lamp = (i) => { const h = hsl[order[i % order.length]]; return C(h.h, Math.max(0.6, h.s), 0.55); };
     [['lampa_rod', 0], ['lampa_gron', 1], ['lampa_gul', 2]].forEach(([n, i]) => set(n, lamp(i), { e: lamp(i) }));
@@ -214,6 +217,68 @@ export class PlaneRig {
     });
     if (knobGeo) this._interiorExtras.push({ parent: null, geometry: knobGeo });
     ['gasreglage_0', 'gasreglage_1', 'gasreglage_2', 'trimhjul'].forEach((n) => { const o = g(n); if (o && rar !== 'common') o.material = metalM; });
+
+    // ---- väggar och tak: skinets eget mönster (Legendary och mönstrade skins), sci-fi-paneler (Ultra)
+    const walls = byName.get('vit_insida') || [], panels = byName.get('panel_mork') || [];
+    const texOf = (t, rx, ry) => { if (!t) return null; const c = t.clone(); c.repeat.set(rx, ry); c.needsUpdate = true; this._ownTexs.push(c); return c; };
+    const body = this.exterior.getObjectByName('flygkropp');
+    const bodyMat = body && !body.userData.skinHidden ? body.material : null;
+    const canvasTex = (draw) => {
+      if (typeof document === 'undefined') return null;
+      const cv = document.createElement('canvas'); cv.width = cv.height = 256;
+      draw(cv.getContext('2d'), 256);
+      const t = new THREE.CanvasTexture(cv); t.colorSpace = THREE.SRGBColorSpace; t.wrapS = t.wrapT = THREE.RepeatWrapping; t.anisotropy = 8;
+      this._ownTexs.push(t); return t;
+    };
+    const accentCss = '#' + glowA.getHexString();
+    const setMaps = (list, map, color, emap, ei) => list.forEach((m) => {
+      m.map = map; m.emissiveMap = emap || null; if (color) m.color.copy(color);
+      if (emap) { m.emissive.setRGB(1, 1, 1); m.emissiveIntensity = ei; }
+      m.needsUpdate = true;
+    });
+    if (rar === 'ultra') {
+      // mörka paneler med lysande hexagonlinjer i accentfärgen
+      const hex = canvasTex((x, n) => {
+        x.fillStyle = '#0d1018'; x.fillRect(0, 0, n, n);
+        const r = n / 8, dx = 1.5 * r, dy = Math.sqrt(3) * r;
+        x.strokeStyle = accentCss; x.lineWidth = 2.5; x.shadowBlur = 8; x.shadowColor = accentCss;
+        for (let i = -1; i <= 6; i++) for (let j = -1; j <= 5; j++) {
+          const cx = i * dx, cy = j * dy + (i % 2 ? dy / 2 : 0);
+          x.beginPath(); for (let k = 0; k <= 6; k++) { const a = k * Math.PI / 3; const px = cx + Math.cos(a) * r * 0.9, py = cy + Math.sin(a) * r * 0.9; k ? x.lineTo(px, py) : x.moveTo(px, py); } x.stroke();
+        }
+      });
+      if (hex) setMaps(walls, texOf(hex, 3, 3), new THREE.Color(0xffffff), texOf(hex, 3, 3), 0.55);
+      set('panel_mork', new THREE.Color(0x111318), { m: 0.6, r: 0.3 });
+    } else if (bodyMat && bodyMat.map) {
+      // väggarna får samma mönster som planets kropp (kamouflage, zebra, galax, drakfjäll …)
+      const glowing = !!bodyMat.emissiveMap;
+      setMaps(walls, texOf(bodyMat.map, 2, 2), new THREE.Color(dark ? 0xbfbfbf : 0xffffff), glowing ? texOf(bodyMat.emissiveMap, 2, 2) : null, rar === 'legendary' ? 0.45 : 0.25);
+    }
+    if (rar === 'epic') {
+      // kolfiber på instrumentbrädan och mittkonsolen
+      const carbon = canvasTex((x, n) => {
+        const q = 16;
+        for (let i = 0; i < n / q; i++) for (let j = 0; j < n / q; j++) {
+          const hz = (i + j) % 2, gr = hz ? x.createLinearGradient(i * q, 0, i * q + q, 0) : x.createLinearGradient(0, j * q, 0, j * q + q);
+          gr.addColorStop(0, '#15161a'); gr.addColorStop(0.5, '#3b3e46'); gr.addColorStop(1, '#15161a');
+          x.fillStyle = gr; x.fillRect(i * q, j * q, q, q);
+        }
+      });
+      if (carbon) setMaps(panels, texOf(carbon, 3, 3), new THREE.Color(0xffffff));
+      panels.forEach((m) => { m.metalness = 0.35; m.roughness = 0.35; });
+    }
+    // ---- LED-lister längs fönstren och instrumentbrädan (Epic och uppåt)
+    if (rar !== 'common') {
+      const ledM = own({ color: glowA, emissive: glowA, emissiveIntensity: rar === 'epic' ? 1.2 : 1.8 });
+      const led = (w, h, d, x, y, z, parent = this.cockpit) => {
+        const m = new THREE.Mesh(new THREE.BoxGeometry(w, h, d), ledM); m.position.set(x, y, z); m.name = 'ledlist';
+        parent.add(m); this._interiorExtras.push(m);
+      };
+      [-1, 1].forEach((sd) => led(0.014, 0.012, 2.3, sd * 0.95, 1.136, 0));     // ovanpå fönsterkarmarnas innerkant
+      const shield = g('blandskydd');
+      if (shield) led(2.2, 0.012, 0.014, 0, 0.056, 0.236, shield);            // framkanten på bländskyddet
+      [-1, 1].forEach((sd) => led(0.014, 0.012, 0.9, sd * 0.19, 0.706, -0.55)); // ovanpå mittkonsolen
+    }
 
     // skinets märke mitt på instrumentbrädan (färgprovet i en rund bricka med sällsynthetens ring)
     const dash = g('instrumentpanel');

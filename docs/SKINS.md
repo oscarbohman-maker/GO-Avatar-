@@ -49,7 +49,12 @@ These are the same fields as in the design package:
 
 The cockpit follows the skin (`applyInterior` in `js/rig.js`):
 
-- **Colors:** seats, panels, walls, buttons, lamps and screens take the skin's colors. The most vivid swatch color is the accent, and dark skins get a dark cabin.
+- **Colors:** seats, panels, walls, roof, buttons, lamps and screens take the skin's colors. The most vivid swatch color is the accent, and dark skins get a dark cabin.
+- **Walls and roof:**
+  - Skins with a patterned body (camouflage, zebra, galaxy, dragon scales …) get the same pattern inside, and it glows if the body glows.
+  - Ultra has dark panels with glowing hexagon lines in the accent color.
+- **Dashboard:** Epic has carbon fiber on the dashboard, center console and floor, and Ultra has a black dashboard.
+- **LED strips:** Epic and above get glowing strips in the accent color along the window frames, the glare shield and the center console.
 - **Badge:** a round badge with the skin's colors sits in the middle of the dashboard, with a ring in the rarity's color.
 - **Throttle knobs:** Common has the standard knobs in the skin's colors, Epic has knurled chrome, Legendary has glowing crystals, and Ultra has glowing orbs with a ring.
 - **Yokes:** Epic has chrome, Legendary has gold with leather grips in the accent color, and Ultra has dark grips with neon strips and a glowing hub.
